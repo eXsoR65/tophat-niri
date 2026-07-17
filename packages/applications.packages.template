@@ -1,0 +1,50 @@
+# =============================================================================
+#  APPLICATION PACKAGES LIST TEMPLATE
+#
+#  Instructions:
+#  1. Rename this file to `applications.packages` (remove .template suffix)
+#  2. Uncomment/add the applications you want installed
+#  3. Comment out the applications you don't want
+#  4. Run: ./install.sh --select packaging --force
+#
+#  Format: One package name per line. '#' starts a comment. Blank lines ignored.
+# =============================================================================
+
+# --- Productivity ---
+# firefox                # Web browser (Firefox ESR available too)
+# brave-browser          # Brave Browser (requires Brave repo stage)
+# brave-origin           # Brave Orgin (requires Brave repo stage)
+# libreoffice            # Office suite
+
+# --- Development ---
+# vim                    # Enhanced Vim
+# neovim                 # Modern Vim fork
+# gcc                    # C compiler
+# gcc-c++                # C++ compiler
+# make                   # Build tool
+# golang                 # Go language
+# rust                   # Rust toolchain
+# nodejs                 # JavaScript runtime
+# npm                    # Node.js package manager
+# python3                # Python (included in base usually)
+# python3-pip            # Python package installer
+# jq                     # JSON processor
+# git-lfs                # Git Large File Storage
+# gh                     # GitHub CLI
+
+# --- Utilities ---
+# gnome-disk-utility     # Disk analyzer
+# tldr                   # Simplified man pages
+# tree                   # Directory tree viewer
+
+# --- Terminal and Shell ---
+# ghostty                # Terminal emulator with platform-native UI and GPU acceleration
+# fish                   # Friendly Interactive Shell
+
+
+# --- Network Tools ---
+# tcpdump                # Network diagnostics
+# nmap                   # Network scanner
+
+# --- Virtualization / Containers ---
+# podman                 # Rootless containers (preferred on Fedora)

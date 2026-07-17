@@ -1,0 +1,13 @@
+# =============================================================================
+#  OPTIONAL HOMEBREW FORMULAE
+#
+#  Copy to homebrew.packages to enable Homebrew for Linux.
+#  Use one formula per line. Casks are not supported by this list.
+#
+#  Trust notice: enabling this runs Homebrew's official, mutable installer from
+#  https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh
+# =============================================================================
+
+# chezmoi
+# just
+# neovim

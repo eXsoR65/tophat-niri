@@ -1,0 +1,3 @@
+# Copy this file to distrobox.enable to install Distrobox and Podman.
+# File presence is the opt-in; its contents are not processed.
+# Containers are not created automatically.

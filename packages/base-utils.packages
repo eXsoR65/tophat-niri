@@ -1,0 +1,23 @@
+# Base utilities — installed after system update
+dnf-plugins-core
+coreutils
+util-linux
+pciutils
+procps-ng
+iputils
+wget
+curl
+git
+tar
+gzip
+unzip
+zip
+bzip2
+xz
+findutils
+grep
+sed
+gawk
+patch
+which
+file

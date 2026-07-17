@@ -1,0 +1,33 @@
+# Desktop support packages — Wayland infrastructure, portals, audio, fonts
+# These complement niri + DMS
+
+# niri default terminal emulator
+# can be disabled once you configure your keybind for something else.
+alacritty
+
+# Pipewire audio stack
+pipewire
+pipewire-pulseaudio
+pipewire-alsa
+pipewire-jack-audio-connection-kit
+wireplumber
+pavucontrol
+alsa-sof-firmware
+
+# Portals and keyring
+xdg-desktop-portal-gtk
+xdg-desktop-portal-gnome
+gnome-keyring
+gnome-keyring-pam
+
+# Xwayland satellite for niri
+xwayland-satellite
+
+# File manager (niri default file manager)
+nautilus
+
+# Wifi related packages
+NetworkManager-wifi
+wpa_supplicant
+iw
+wireless-regdb

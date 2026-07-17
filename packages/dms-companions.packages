@@ -1,0 +1,15 @@
+# DMS companion packages
+# Quickshell, matugen, material-symbols-fonts are pulled in automatically
+# by the avengemedia/danklinux dependency repo
+# Note cliphist and wl-clipboard are no longer required for DMS 1.2 or newer.
+
+matugen # Material Design color palette generation
+dgop # Detailed system metrics and process lists
+dsearch # Filesystem search engine
+qt6-qtmultimedia # System sound feedback
+i2c-tools # Monitor backlight control
+
+# Fonts
+rsms-inter-vf-fonts # Normal Font
+fira-code-fonts # Monospace Font
+google-noto-color-emoji-fonts # Emoji Font

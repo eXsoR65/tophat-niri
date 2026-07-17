@@ -1,0 +1,4 @@
+# Intel Wi-Fi firmware packages — installed only when Intel Wi-Fi hardware is detected
+iwlwifi-dvm-firmware
+iwlwifi-mld-firmware
+iwlwifi-mvm-firmware

@@ -1,0 +1,11 @@
+# Packages that DMS replaces — removed if present
+mako
+waybar
+fuzzel
+wofi
+swaylock
+swayidle
+swaybg
+swww
+dunst
+swaync

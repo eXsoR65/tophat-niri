@@ -1,0 +1,5 @@
+# Local package selections
+packages/applications.packages
+packages/flatpaks.packages
+packages/distrobox.enable
+packages/homebrew.packages

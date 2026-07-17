@@ -1,0 +1,11 @@
+# =============================================================================
+#  OPTIONAL FLATPAK APPLICATIONS
+#
+#  Copy to flatpaks.packages to enable user-scoped Flatpak and Flathub.
+#  Use one Flathub application ID per line. Blank lines and comments are ignored.
+# =============================================================================
+
+# org.mozilla.firefox
+# com.github.tchx84.Flatseal
+# org.gimp.GIMP
+# com.spotify.Client
