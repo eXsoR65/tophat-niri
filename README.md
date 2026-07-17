@@ -1,11 +1,15 @@
 # Tophat
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/Tophat-logo_transperant-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="./assets/Tophat-logo_transperant-light.svg">
+  <img src="./assets/Tophat-logo_transperant-light.svg" alt="Tophat logo" width="270" height="270">
+</picture>
+
 **An opinionated Fedora niri + dms workstation installer.**
 
 Tophat transforms a Fedora Minimal installation into a complete scrollable-tiling
-workstation using [niri](https://github.com/niri-wm/niri) and
-[DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell). Its staged installation flow is inspired by
-[Omarchy](https://github.com/basecamp/omarchy).
+workstation using [niri](https://github.com/niri-wm/niri) and [DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell). Its staged installation flow is inspired by [Omarchy](https://github.com/basecamp/omarchy).
 
 > [!NOTE]
 > This is a evolutioning project. So make sure you read the instructions below.
