@@ -27,7 +27,8 @@ jobs:
 
       - name: ShellCheck
         run: |
-          shellcheck install.sh lib/**/*.sh tests/**/*.sh kickstart/*.sh
+          mapfile -t shell_files < <(find lib tests kickstart -type f -name '*.sh' -print | sort)
+          shellcheck -s bash -x -e SC1090,SC1091 install.sh "${shell_files[@]}"
 
       - name: Formatting
         run: |
