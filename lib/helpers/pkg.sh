@@ -61,6 +61,7 @@ pkg_install_from_list() {
 pkg_remove() {
   local pkgs=("$@")
   local to_remove=()
+  local pkg=""
 
   for pkg in "${pkgs[@]}"; do
     if rpm -q "$pkg" &>/dev/null; then
@@ -73,7 +74,41 @@ pkg_remove() {
     return 0
   fi
 
+  log_warn "Tophat is about to remove packages. Package removal is destructive."
+  log_warn "Packages selected for removal: ${to_remove[*]}"
+
+  if [[ "$DRY_RUN" == true ]]; then
+    run_logged "Would remove packages: ${to_remove[*]}" dnf remove -y "${to_remove[@]}"
+    return 0
+  fi
+
+  if [[ "${ACCEPT_PACKAGE_REMOVALS:-false}" != true ]]; then
+    if [[ -t 0 ]]; then
+      local answer=""
+      printf 'Continue removing these packages? [y/N] '
+      read -r answer
+      case "$answer" in
+      y | Y | yes | YES) ;;
+      *)
+        log_error "Package removal declined"
+        return 1
+        ;;
+      esac
+    else
+      log_error "Package removal requires confirmation"
+      log_error "Re-run with --accept-package-removals to allow this non-interactively"
+      return 1
+    fi
+  fi
+
   run_logged "Removing packages: ${to_remove[*]}" dnf remove -y "${to_remove[@]}"
+
+  local manifest_dir="$SETUP_STATE_DIR/manifests"
+  local manifest="$manifest_dir/removed-packages-$(date '+%Y%m%dT%H%M%S%z').txt"
+  install -d -m 0750 "$manifest_dir"
+  printf '%s\n' "${to_remove[@]}" >"$manifest"
+  chmod 0640 "$manifest" 2>/dev/null || true
+  log_info "Recorded removed package manifest: $manifest"
 }
 
 # -----------------------------------------------------------------------------

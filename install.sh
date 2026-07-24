@@ -12,18 +12,20 @@ set -euo pipefail
 # -----------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-export TOPHAT_VERSION="2.1"
 export SETUP_ROOT="$SCRIPT_DIR"
+readonly TOPHAT_VERSION="$(<"$SETUP_ROOT/VERSION")"
+export TOPHAT_VERSION
 export SETUP_LIB="$SETUP_ROOT/lib"
 export SETUP_FILES="$SETUP_ROOT/files"
 export SETUP_PACKAGES="$SETUP_ROOT/packages"
 
 # Logging and state
-export SETUP_LOG="/var/log/tophat.log"
+export SETUP_LOG_DIR="/var/log/tophat"
+export SETUP_LOG=""
 export SETUP_STATE_DIR="/var/lib/tophat"
 
-# Target user (detected dynamically in preflight, fallback to 'x')
-TARGET_USER="${SUDO_USER:-${USER:-x}}"
+# Target user (resolved during preflight)
+TARGET_USER=""
 
 # COPR repositories (stable only)
 NIRI_COPR="yalter/niri"
@@ -51,6 +53,7 @@ DRY_RUN=false
 SELECTIVE_STAGES=""
 FORCE=false
 VERBOSE=false
+ACCEPT_PACKAGE_REMOVALS=false
 
 usage() {
   cat <<EOF
@@ -62,6 +65,9 @@ Options:
   --dry-run          Print what would happen without executing changes
   --select STAGES   Comma-separated list of stages to run
                      (e.g.: repos,packaging,config)
+  --target-user USER Configure this non-root user account
+  --accept-package-removals
+                     Allow Tophat to remove packages listed as replaced
   --force            Run even if setup marker indicates completion
   --verbose          Show command output inline (don't suppress)
   --help             Show this message
@@ -86,6 +92,18 @@ while [[ $# -gt 0 ]]; do
     SELECTIVE_STAGES="$2"
     shift 2
     ;;
+  --target-user)
+    if [[ $# -lt 2 || "${2:0:2}" == "--" ]]; then
+      echo "Error: --target-user requires a username" >&2
+      exit 1
+    fi
+    TARGET_USER="$2"
+    shift 2
+    ;;
+  --accept-package-removals)
+    ACCEPT_PACKAGE_REMOVALS=true
+    shift
+    ;;
   --force)
     FORCE=true
     shift
@@ -102,36 +120,71 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-export DRY_RUN FORCE VERBOSE
+export DRY_RUN FORCE VERBOSE ACCEPT_PACKAGE_REMOVALS
 
 # All stages in execution order
 ALL_STAGES=("preflight" "repos" "packaging" "config" "services" "extras" "finalize")
+declare -Ar STAGE_DEPENDENCIES=(
+  [preflight]=""
+  [repos]="preflight"
+  [packaging]="preflight repos"
+  [config]="preflight packaging"
+  [services]="preflight packaging config"
+  [extras]="preflight"
+  [finalize]="preflight"
+)
+
+stage_exists() {
+  local candidate="$1"
+  local stage
+
+  for stage in "${ALL_STAGES[@]}"; do
+    [[ "$candidate" == "$stage" ]] && return 0
+  done
+
+  return 1
+}
+
+stage_add_with_dependencies() {
+  local stage="$1"
+  local dep
+
+  if ! stage_exists "$stage"; then
+    echo "Error: invalid stage '$stage'" >&2
+    echo "Available stages: ${ALL_STAGES[*]}" >&2
+    exit 1
+  fi
+
+  for dep in ${STAGE_DEPENDENCIES[$stage]}; do
+    stage_add_with_dependencies "$dep"
+  done
+
+  STAGE_WANTED[$stage]=1
+}
 
 if [[ -n "$SELECTIVE_STAGES" ]]; then
   IFS=',' read -ra SELECTED <<<"$SELECTIVE_STAGES"
+  declare -A STAGE_WANTED=()
 
   for sel in "${SELECTED[@]}"; do
-    valid=false
-    for stage in "${ALL_STAGES[@]}"; do
-      if [[ "$sel" == "$stage" ]]; then
-        valid=true
-        break
-      fi
-    done
+    sel="${sel#"${sel%%[![:space:]]*}"}"
+    sel="${sel%"${sel##*[![:space:]]}"}"
 
-    if [[ "$valid" != true ]]; then
-      echo "Error: invalid stage '$sel'" >&2
-      echo "Available stages: ${ALL_STAGES[*]}" >&2
+    if [[ -z "$sel" ]]; then
+      echo "Error: --select contains an empty stage name" >&2
       exit 1
     fi
+
+    stage_add_with_dependencies "$sel"
   done
 
   STAGES=()
   for stage in "${ALL_STAGES[@]}"; do
-    for sel in "${SELECTED[@]}"; do
-      [[ "$stage" == "$sel" ]] && STAGES+=("$stage")
-    done
+    [[ -n "${STAGE_WANTED[$stage]:-}" ]] && STAGES+=("$stage")
   done
+
+  echo "Requested stages: ${SELECTED[*]}"
+  echo "Execution plan: ${STAGES[*]}"
 else
   STAGES=("${ALL_STAGES[@]}")
 fi
@@ -174,14 +227,26 @@ banner() {
 trap 'rc=$?; if declare -F log_error >/dev/null; then log_error "Tophat failed at line $LINENO (exit code $rc)"; else echo "[ERROR] Tophat failed at line $LINENO (exit code $rc)" >&2; fi' ERR
 
 main() {
-  banner
+  umask 027
 
-  if [[ "$DRY_RUN" != true ]]; then
-    mkdir -p "$SETUP_STATE_DIR"
+  local run_id
+  run_id="$(date '+%Y%m%dT%H%M%S%z')"
+
+  if [[ "$DRY_RUN" == true ]]; then
+    SETUP_LOG="${TMPDIR:-/tmp}/tophat-dry-run.$$.log"
+  else
+    install -d -m 0750 "$SETUP_STATE_DIR"
+    install -d -m 0750 "$SETUP_LOG_DIR/runs"
+    SETUP_LOG="$SETUP_LOG_DIR/runs/${run_id}.log"
+    ln -sfn "runs/${run_id}.log" "$SETUP_LOG_DIR/latest.log"
   fi
+  export SETUP_LOG
 
-  echo "=== Tophat v${TOPHAT_VERSION} — $(date) ===" >"$SETUP_LOG"
-  echo "Dry run: $DRY_RUN | Stages: ${STAGES[*]}" >>"$SETUP_LOG"
+  printf '=== Tophat v%s — %s ===\n' "$TOPHAT_VERSION" "$(date)" >"$SETUP_LOG"
+  printf 'Dry run: %s | Stages: %s\n' "$DRY_RUN" "${STAGES[*]}" >>"$SETUP_LOG"
+  chmod 0640 "$SETUP_LOG" 2>/dev/null || true
+
+  banner
 
   # Helpers are always loaded first
   source "$SETUP_LIB/helpers/all.sh"
@@ -197,6 +262,14 @@ main() {
 
     log_stage_start "$stage"
     source "$stage_file"
+
+    local stage_entrypoint="run_${stage}_stage"
+    if ! declare -F "$stage_entrypoint" >/dev/null; then
+      log_error "Stage entry point not found: $stage_entrypoint"
+      exit 1
+    fi
+
+    "$stage_entrypoint"
     log_stage_complete "$stage"
   done
 

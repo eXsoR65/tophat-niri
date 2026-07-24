@@ -1,0 +1,98 @@
+############################################
+## Tophat minimal Fedora Kickstart example ##
+############################################
+
+# WARNING: Kickstart installations can erase disks without further prompts.
+# Review every REQUIRED setting before use. This file is intentionally not ready
+# to run until placeholders are replaced and destructive storage directives are
+# uncommented intentionally.
+
+# -- Lang and Keyboard settings --
+lang en_US.UTF-8
+keyboard --vckeymap=us --xlayouts='us'
+
+# -- System timezone --
+timezone --utc America/New_York
+
+# -- Network --
+# Change hostname if desired. IPv6 is left enabled by default.
+network --bootproto=dhcp --device=link --hostname=tophat-fedora
+
+# -- Firewall and SELinux --
+firewall --enabled
+selinux --enforcing
+
+# -- Packages --
+# Currently configured for a minimal install.
+%packages
+@core
+openssh-server
+plymouth-system-theme
+dnf-utils
+pciutils
+usbutils
+vim
+git
+curl
+%end
+
+# -- Partitioning --
+text
+
+# REQUIRED / DESTRUCTIVE: replace REPLACE_ME_DISK with the target install disk,
+# then uncomment clearpart only after confirming the selected disk can be erased.
+# Example disk names: sda, vda, nvme0n1
+# clearpart --all --initlabel --drives=REPLACE_ME_DISK
+
+# REQUIRED: choose an encryption strategy. Do not use an empty passphrase.
+# Prefer omitting --passphrase so Anaconda prompts interactively, or provide a
+# secure value through your private deployment process.
+autopart --encrypted --type btrfs --nohome
+zerombr
+shutdown # once the automated install is done it will shutdown
+
+# -- User Accounts --
+# Root account disabled.
+rootpw --lock
+
+# REQUIRED: configure a non-root admin account.
+# Prefer an SSH key and a private password hash generated with:
+#   mkpasswd --method=SHA-512 --rounds=500000
+# user --name=REPLACE_ME_USER --groups=wheel --gecos="REPLACE_ME_FULL_NAME" --password="REPLACE_ME_PASSWORD_HASH" --iscrypted
+# sshkey --username REPLACE_ME_USER "REPLACE_ME_PUBLIC_SSH_KEY"
+
+# -- Pre-Installation --
+%pre --log=/var/log/ks-pre.log
+
+# Tune DNF for faster downloads
+cat > /etc/dnf/dnf.conf << 'EOF'
+[main]
+max_parallel_downloads=10
+fastestmirror=True
+defaultyes=True
+keepcache=False
+EOF
+
+%end
+
+# -- Post-Installation --
+%post --log=/var/log/ks-post.log
+
+# Set plymouth theme to bgrt Graphical boot.
+plymouth-set-default-theme -R bgrt
+
+# Configure SSHD for key-only authentication (hardening)
+mkdir -p /etc/ssh/sshd_config.d
+
+cat > /etc/ssh/sshd_config.d/70-no-password-login.conf << 'EOF'
+PasswordAuthentication no
+PermitEmptyPasswords no
+ChallengeResponseAuthentication no
+PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys
+EOF
+
+# Remove leftover kickstart artifacts
+rm -f /root/anaconda-ks.cfg /root/original-ks.cfg
+
+%end

@@ -19,7 +19,7 @@ workstation using [niri](https://github.com/niri-wm/niri) and [DankMaterialShell
 - Fedora Minimal Install with only Core packages.
   - Can be done with Fedora Everything Network Install ISO and
     only selecting Fedora Custom Operating System in software selection.
-  - Another option is using the example kickstart file in the root of the repo.
+  - Another option is copying and reviewing `kickstart/tophat-minimal.ks.example`.
 - Internet connection
 - Non-root user account created with `sudo` privileges
 
@@ -50,6 +50,13 @@ From the project root:
 sudo ./install.sh
 ```
 
+Configure an explicit target user when running directly as root or when the
+intended account is not the sudo caller:
+
+```bash
+sudo ./install.sh --target-user alice
+```
+
 Verbose mode:
 
 ```bash
@@ -66,6 +73,12 @@ Force re-run stages even if state markers exist:
 
 ```bash
 sudo ./install.sh --force
+```
+
+Allow package removals without an interactive confirmation prompt:
+
+```bash
+sudo ./install.sh --accept-package-removals
 ```
 
 Run selected stages only:
@@ -133,11 +146,14 @@ Note: Removing an entry does not uninstall software automatically.
 
 ## Logs and state
 
-Log file:
+Log files:
 
 ```text
-/var/log/tophat.log
+/var/log/tophat/latest.log
+/var/log/tophat/runs/
 ```
+
+Dry runs write only to a temporary log under `${TMPDIR:-/tmp}`.
 
 State directory:
 

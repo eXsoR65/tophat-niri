@@ -37,10 +37,11 @@ detect_environment() {
     exit 1
   fi
 
-  # Resolve target user (override v1's hardcoded value with dynamic detection)
+  # Resolve target user without guessing. Use --target-user or sudo from the
+  # intended non-root account.
   if ! resolve_target_user "${TARGET_USER:-}"; then
     log_error "Could not resolve a non-root target user with a valid home directory"
-    log_error "Run via sudo from the target account, or set SUDO_USER/TARGET_USER explicitly"
+    log_error "Run via sudo from the target account, or pass --target-user USER"
     exit 1
   fi
 

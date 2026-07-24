@@ -60,28 +60,22 @@ check_network_connectivity() {
 }
 
 # Resolve the non-root user this setup should configure.
-# Priority: explicit candidate, sudo user, current non-root user, logname,
-# then the first regular UID from /etc/passwd.
+# Priority: explicit candidate, then a valid non-root sudo user. If neither is
+# available, fail rather than guessing which account owns the workstation.
 resolve_target_user() {
   local candidate="${1:-}"
   local home=""
 
-  if [[ -z "$candidate" || "$candidate" == "root" ]]; then
+  if [[ -z "$candidate" ]]; then
     if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
       candidate="$SUDO_USER"
-    elif [[ -n "${USER:-}" && "${USER}" != "root" ]]; then
-      candidate="$USER"
     else
-      candidate="$(logname 2>/dev/null || true)"
-      [[ "$candidate" == "root" ]] && candidate=""
+      return 1
     fi
   fi
 
-  if [[ -z "$candidate" || "$candidate" == "root" ]]; then
-    candidate="$(awk -F: '$3 >= 1000 && $3 < 60000 && $1 != "nobody" { print $1; exit }' /etc/passwd)"
-  fi
-
-  [[ -n "$candidate" ]] || return 1
+  [[ "$candidate" != "root" ]] || return 1
+  id "$candidate" &>/dev/null || return 1
 
   home="$(getent passwd "$candidate" | cut -d: -f6)"
   [[ -n "$home" && -d "$home" ]] || return 1
