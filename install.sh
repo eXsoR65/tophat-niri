@@ -81,43 +81,43 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-  --dry-run)
-    DRY_RUN=true
-    shift
-    ;;
-  --select)
-    if [[ $# -lt 2 || "${2:0:2}" == "--" ]]; then
-      echo "Error: --select requires a comma-separated stage list" >&2
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
+    --select)
+      if [[ $# -lt 2 || "${2:0:2}" == "--" ]]; then
+        echo "Error: --select requires a comma-separated stage list" >&2
+        exit 1
+      fi
+      SELECTIVE_STAGES="$2"
+      shift 2
+      ;;
+    --target-user)
+      if [[ $# -lt 2 || "${2:0:2}" == "--" ]]; then
+        echo "Error: --target-user requires a username" >&2
+        exit 1
+      fi
+      TARGET_USER="$2"
+      shift 2
+      ;;
+    --accept-package-removals)
+      ACCEPT_PACKAGE_REMOVALS=true
+      shift
+      ;;
+    --force)
+      FORCE=true
+      shift
+      ;;
+    --verbose)
+      VERBOSE=true
+      shift
+      ;;
+    --help | -h) usage ;;
+    *)
+      echo "Unknown option: $1" >&2
       exit 1
-    fi
-    SELECTIVE_STAGES="$2"
-    shift 2
-    ;;
-  --target-user)
-    if [[ $# -lt 2 || "${2:0:2}" == "--" ]]; then
-      echo "Error: --target-user requires a username" >&2
-      exit 1
-    fi
-    TARGET_USER="$2"
-    shift 2
-    ;;
-  --accept-package-removals)
-    ACCEPT_PACKAGE_REMOVALS=true
-    shift
-    ;;
-  --force)
-    FORCE=true
-    shift
-    ;;
-  --verbose)
-    VERBOSE=true
-    shift
-    ;;
-  --help | -h) usage ;;
-  *)
-    echo "Unknown option: $1" >&2
-    exit 1
-    ;;
+      ;;
   esac
 done
 

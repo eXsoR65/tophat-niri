@@ -88,11 +88,11 @@ pkg_remove() {
       printf 'Continue removing these packages? [y/N] '
       read -r answer
       case "$answer" in
-      y | Y | yes | YES) ;;
-      *)
-        log_error "Package removal declined"
-        return 1
-        ;;
+        y | Y | yes | YES) ;;
+        *)
+          log_error "Package removal declined"
+          return 1
+          ;;
       esac
     else
       log_error "Package removal requires confirmation"

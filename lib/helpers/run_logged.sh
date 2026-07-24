@@ -26,12 +26,12 @@ _log_write() {
   # Print to terminal with colour based on verbosity
   if [[ "$VERBOSE" == true ]] || [[ "$level" == "ERROR" ]] || [[ "$level" == "WARN" ]] || [[ "$level" == "STAGE" ]]; then
     case "$level" in
-    ERROR) echo -e "${CLR_RED}[ERROR]${CLR_RESET} $message" >&2 ;;
-    WARN) echo -e "${CLR_YELLOW}[WARN]${CLR_RESET} $message" ;;
-    INFO) echo -e "${CLR_BLUE}[INFO]${CLR_RESET} $message" ;;
-    STAGE) echo -e "${CLR_BOLD}${CLR_GREEN}[STAGE]${CLR_RESET} $message" ;;
-    OK) echo -e "${CLR_GREEN}[OK]${CLR_RESET} $message" ;;
-    *) echo "[$level] $message" ;;
+      ERROR) echo -e "${CLR_RED}[ERROR]${CLR_RESET} $message" >&2 ;;
+      WARN) echo -e "${CLR_YELLOW}[WARN]${CLR_RESET} $message" ;;
+      INFO) echo -e "${CLR_BLUE}[INFO]${CLR_RESET} $message" ;;
+      STAGE) echo -e "${CLR_BOLD}${CLR_GREEN}[STAGE]${CLR_RESET} $message" ;;
+      OK) echo -e "${CLR_GREEN}[OK]${CLR_RESET} $message" ;;
+      *) echo "[$level] $message" ;;
     esac
   fi
 }

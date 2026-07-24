@@ -1,7 +1,7 @@
 # =============================================================================
 #  applications.sh — Install user applications
 #
-#  Copy Template ./packages/applications.packages.template to 
+#  Copy Template ./packages/applications.packages.template to
 #  ./packages/applications.packages and add your desired apps
 # =============================================================================
 
