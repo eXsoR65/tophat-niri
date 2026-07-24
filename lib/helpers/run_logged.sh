@@ -88,7 +88,7 @@ run_logged() {
     log_error "$description FAILED (exit $exit_code, ${duration}s)"
     log_error "Command: $cmd_str"
     log_error "Check full log: $SETUP_LOG"
-    exit $exit_code
+    exit "$exit_code"
   fi
 }
 
@@ -118,7 +118,7 @@ log_stage_complete() {
   _log_write "STAGE" "✓ Completed stage: $stage (${elapsed}s)"
 
   if [[ "$DRY_RUN" != true ]]; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S')" >"$SETUP_STATE_DIR/stage-${stage}.done"
+    date '+%Y-%m-%d %H:%M:%S' >"$SETUP_STATE_DIR/stage-${stage}.done"
   fi
 }
 
@@ -169,7 +169,7 @@ log_summary() {
   _log_write "STAGE" "══════════════════════════════════════════════════"
 
   if [[ "$DRY_RUN" != true ]]; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S')" >"$SETUP_STATE_DIR/.last-run"
+    date '+%Y-%m-%d %H:%M:%S' >"$SETUP_STATE_DIR/.last-run"
   fi
 
   echo ""

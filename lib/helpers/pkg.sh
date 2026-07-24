@@ -104,7 +104,8 @@ pkg_remove() {
   run_logged "Removing packages: ${to_remove[*]}" dnf remove -y "${to_remove[@]}"
 
   local manifest_dir="$SETUP_STATE_DIR/manifests"
-  local manifest="$manifest_dir/removed-packages-$(date '+%Y%m%dT%H%M%S%z').txt"
+  local manifest=""
+  manifest="$manifest_dir/removed-packages-$(date '+%Y%m%dT%H%M%S%z').txt"
   install -d -m 0750 "$manifest_dir"
   printf '%s\n' "${to_remove[@]}" >"$manifest"
   chmod 0640 "$manifest" 2>/dev/null || true

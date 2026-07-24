@@ -13,7 +13,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 export SETUP_ROOT="$SCRIPT_DIR"
-readonly TOPHAT_VERSION="$(<"$SETUP_ROOT/VERSION")"
+TOPHAT_VERSION="$(<"$SETUP_ROOT/VERSION")"
+readonly TOPHAT_VERSION
 export TOPHAT_VERSION
 export SETUP_LIB="$SETUP_ROOT/lib"
 export SETUP_FILES="$SETUP_ROOT/files"
@@ -224,7 +225,20 @@ banner() {
 # -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
-trap 'rc=$?; if declare -F log_error >/dev/null; then log_error "Tophat failed at line $LINENO (exit code $rc)"; else echo "[ERROR] Tophat failed at line $LINENO (exit code $rc)" >&2; fi' ERR
+on_error() {
+  local rc=$?
+  local line=${BASH_LINENO[0]:-unknown}
+
+  if declare -F log_error >/dev/null; then
+    log_error "Tophat failed at line $line (exit code $rc)"
+  else
+    echo "[ERROR] Tophat failed at line $line (exit code $rc)" >&2
+  fi
+
+  exit "$rc"
+}
+
+trap on_error ERR
 
 main() {
   umask 027
@@ -249,6 +263,7 @@ main() {
   banner
 
   # Helpers are always loaded first
+  # shellcheck source=lib/helpers/all.sh
   source "$SETUP_LIB/helpers/all.sh"
   log_ok "Helpers loaded"
 
@@ -261,6 +276,7 @@ main() {
     fi
 
     log_stage_start "$stage"
+    # shellcheck disable=SC1090
     source "$stage_file"
 
     local stage_entrypoint="run_${stage}_stage"

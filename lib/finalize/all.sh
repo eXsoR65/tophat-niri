@@ -25,15 +25,17 @@ run_finalize_stage() {
 
   # Write completion marker
   if [[ "$DRY_RUN" != true ]]; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S')" >"$SETUP_STATE_DIR/.completed"
-    echo "version=$TOPHAT_VERSION" >>"$SETUP_STATE_DIR/.completed"
-    echo "fedora=$FEDORA_VERSION" >>"$SETUP_STATE_DIR/.completed"
-    echo "gpu=$GPU_VENDOR" >>"$SETUP_STATE_DIR/.completed"
-    echo "form_factor=$FORM_FACTOR" >>"$SETUP_STATE_DIR/.completed"
-    echo "intel_wifi=$HAS_INTEL_WIFI" >>"$SETUP_STATE_DIR/.completed"
-    echo "user=$TARGET_USER" >>"$SETUP_STATE_DIR/.completed"
-    echo "niri_copr=$NIRI_COPR" >>"$SETUP_STATE_DIR/.completed"
-    echo "dms_copr=$DMS_COPR" >>"$SETUP_STATE_DIR/.completed"
+    {
+      date '+%Y-%m-%d %H:%M:%S'
+      echo "version=$TOPHAT_VERSION"
+      echo "fedora=$FEDORA_VERSION"
+      echo "gpu=$GPU_VENDOR"
+      echo "form_factor=$FORM_FACTOR"
+      echo "intel_wifi=$HAS_INTEL_WIFI"
+      echo "user=$TARGET_USER"
+      echo "niri_copr=$NIRI_COPR"
+      echo "dms_copr=$DMS_COPR"
+    } >"$SETUP_STATE_DIR/.completed"
   fi
 
   log_ok "Tophat setup complete!"
