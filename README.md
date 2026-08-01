@@ -12,7 +12,7 @@ Tophat transforms a Fedora Minimal installation into a complete scrollable-tilin
 workstation using [niri](https://github.com/niri-wm/niri) and [DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell). Its staged installation flow is inspired by [Omarchy](https://github.com/basecamp/omarchy).
 
 > [!NOTE]
-> This is a evolutioning project. So make sure you read the instructions below.
+> This is an evolving project. So make sure you read the instructions below.
 
 ## Prerequisites
 

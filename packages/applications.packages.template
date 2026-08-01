@@ -13,7 +13,7 @@
 # --- Productivity ---
 # firefox                # Web browser (Firefox ESR available too)
 # brave-browser          # Brave Browser (requires Brave repo stage)
-# brave-origin           # Brave Orgin (requires Brave repo stage)
+# brave-origin           # Brave Origin (requires Brave repo stage)
 # libreoffice            # Office suite
 
 # --- Development ---

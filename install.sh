@@ -17,7 +17,6 @@ TOPHAT_VERSION="$(<"$SETUP_ROOT/VERSION")"
 readonly TOPHAT_VERSION
 export TOPHAT_VERSION
 export SETUP_LIB="$SETUP_ROOT/lib"
-export SETUP_FILES="$SETUP_ROOT/files"
 export SETUP_PACKAGES="$SETUP_ROOT/packages"
 
 # Logging and state

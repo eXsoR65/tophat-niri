@@ -68,7 +68,6 @@ rootpw --lock
 cat > /etc/dnf/dnf.conf << 'EOF'
 [main]
 max_parallel_downloads=10
-fastestmirror=True
 defaultyes=True
 keepcache=False
 EOF

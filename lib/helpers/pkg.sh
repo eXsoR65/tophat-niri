@@ -1,8 +1,7 @@
 # =============================================================================
 #  pkg.sh — Package management wrappers
 #
-#    pkg_install(), pkg_remove(), enable_copr()
-#    + new repo_enable_rpm_fusion() for your request
+#    pkg_install(), pkg_remove(), enable_copr(), repo_enable_rpm_fusion()
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -156,7 +155,7 @@ enable_copr() {
 }
 
 # -----------------------------------------------------------------------------
-# repo_enable_rpm_fusion — Enable RPM Fusion free + nonfree (NEW per your request)
+# repo_enable_rpm_fusion — Enable RPM Fusion free + nonfree
 # -----------------------------------------------------------------------------
 repo_enable_rpm_fusion() {
   if rpm -q rpmfusion-free-release &>/dev/null; then

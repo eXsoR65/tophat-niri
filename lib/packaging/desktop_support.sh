@@ -1,5 +1,5 @@
 # =============================================================================
-#  desktop_support.sh — Required packaged for must functions
+#  desktop_support.sh — Required packages for core desktop functions
 # =============================================================================
 
 log_info "Installing desktop support packages..."

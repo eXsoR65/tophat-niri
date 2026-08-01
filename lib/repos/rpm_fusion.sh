@@ -1,5 +1,5 @@
 # =============================================================================
-#  rpm_fusion.sh — Enable RPM Fusion free + nonfree (as you requested)
+#  rpm_fusion.sh — Enable RPM Fusion free + nonfree
 #  Needed for: media codecs, NVIDIA drivers (if applicable)
 # =============================================================================
 
