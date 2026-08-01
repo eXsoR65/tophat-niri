@@ -201,23 +201,44 @@ fi
 # -----------------------------------------------------------------------------
 # Banner
 # -----------------------------------------------------------------------------
+BANNER_WIDTH=60
+
+_banner_line() {
+  printf "%-${BANNER_WIDTH}s\n" "$1"
+}
+
+_banner_center() {
+  local text="$1"
+  local pad_left=$(((BANNER_WIDTH - ${#text}) / 2))
+  local pad_right=$((BANNER_WIDTH - pad_left - ${#text}))
+  ((pad_left < 0)) && pad_left=0
+  ((pad_right < 0)) && pad_right=0
+  printf "%${pad_left}s%s%${pad_right}s\n" "" "$text" ""
+}
+
+_banner_separator() {
+  printf '═%.0s' $(seq "$BANNER_WIDTH")
+  printf '\n'
+}
+
 banner() {
   local start_date
   start_date="$(date '+%Y-%m-%d %H:%M:%S')"
 
-  echo -e "${CLR_BOLD}"
-  echo "════════════════════════════════════════════════════════════"
-  echo "          Tophat v${TOPHAT_VERSION}                         "
-  echo "          Fedora niri + DankMaterialShell                   "
-  echo "════════════════════════════════════════════════════════════"
-  echo "  Started: ${start_date}                                    "
+  local mode_line="  Mode: LIVE"
   if [[ "$DRY_RUN" == true ]]; then
-    echo "  Mode: DRY RUN (no changes will be made)                 "
-  else
-    echo "  Mode: LIVE                                              "
+    mode_line="  Mode: DRY RUN (no changes will be made)"
   fi
-  echo "  Stages: ${STAGES[*]}                                      "
-  echo "════════════════════════════════════════════════════════════"
+
+  echo -e "${CLR_BOLD}"
+  _banner_separator
+  _banner_center "Tophat v${TOPHAT_VERSION}"
+  _banner_center "Fedora niri + DankMaterialShell"
+  _banner_separator
+  _banner_line "  Started: ${start_date}"
+  _banner_line "$mode_line"
+  _banner_line "  Stages: ${STAGES[*]}"
+  _banner_separator
   echo -e "${CLR_RESET}"
 }
 
