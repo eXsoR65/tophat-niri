@@ -3,9 +3,9 @@
 # =============================================================================
 
 # Support running `--select packaging` without running preflight in the same
-# invocation. If hardware detection was not already done, source the detection
-# module and run only the Intel Wi-Fi check.
-if [[ "${HAS_INTEL_WIFI:-false}" != true ]]; then
+# invocation, and cover minimal installs where preflight ran before pciutils
+# was installed. Re-detect only when no reliable detection has happened yet.
+if [[ "${INTEL_WIFI_DETECTION_RELIABLE:-false}" != true ]]; then
   if [[ -f "$SETUP_LIB/preflight/detect_hardware.sh" ]]; then
     source "$SETUP_LIB/preflight/detect_hardware.sh"
     detect_intel_wifi

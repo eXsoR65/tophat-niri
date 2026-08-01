@@ -7,16 +7,20 @@ export HAS_BATTERY=false
 export FORM_FACTOR="desktop"
 export HAS_INTEL_WIFI=false
 export INTEL_WIFI_DEVICE=""
+export INTEL_WIFI_DETECTION_RELIABLE=false
 
 detect_intel_wifi() {
   HAS_INTEL_WIFI=false
   INTEL_WIFI_DEVICE=""
+  INTEL_WIFI_DETECTION_RELIABLE=false
 
   if ! cmd_present lspci; then
     log_warn "lspci not found; Intel Wi-Fi detection skipped until pciutils is installed"
-    export HAS_INTEL_WIFI INTEL_WIFI_DEVICE
+    export HAS_INTEL_WIFI INTEL_WIFI_DEVICE INTEL_WIFI_DETECTION_RELIABLE
     return 0
   fi
+
+  INTEL_WIFI_DETECTION_RELIABLE=true
 
   INTEL_WIFI_DEVICE="$(
     lspci 2>/dev/null |
@@ -32,7 +36,7 @@ detect_intel_wifi() {
     log_info "No Intel Wi-Fi detected"
   fi
 
-  export HAS_INTEL_WIFI INTEL_WIFI_DEVICE
+  export HAS_INTEL_WIFI INTEL_WIFI_DEVICE INTEL_WIFI_DETECTION_RELIABLE
 }
 
 detect_hardware() {
