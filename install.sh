@@ -134,6 +134,9 @@ declare -Ar STAGE_DEPENDENCIES=(
   [finalize]="preflight"
 )
 
+declare -A STAGE_WANTED=()
+declare -A STAGE_RESOLVING=()
+
 stage_exists() {
   local candidate="$1"
   local stage
@@ -155,16 +158,28 @@ stage_add_with_dependencies() {
     exit 1
   fi
 
+  # Already resolved in this run; its dependencies were processed too
+  if [[ -n "${STAGE_WANTED[$stage]:-}" ]]; then
+    return 0
+  fi
+
+  # Fail loudly if STAGE_DEPENDENCIES ever gains a cycle
+  if [[ -n "${STAGE_RESOLVING[$stage]:-}" ]]; then
+    echo "Error: circular stage dependency detected at '$stage'" >&2
+    exit 1
+  fi
+
+  STAGE_RESOLVING[$stage]=1
   for dep in ${STAGE_DEPENDENCIES[$stage]}; do
     stage_add_with_dependencies "$dep"
   done
+  unset 'STAGE_RESOLVING[$stage]'
 
   STAGE_WANTED[$stage]=1
 }
 
 if [[ -n "$SELECTIVE_STAGES" ]]; then
   IFS=',' read -ra SELECTED <<<"$SELECTIVE_STAGES"
-  declare -A STAGE_WANTED=()
 
   for sel in "${SELECTED[@]}"; do
     sel="${sel#"${sel%%[![:space:]]*}"}"
