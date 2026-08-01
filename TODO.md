@@ -57,20 +57,20 @@ for t in tests/*_test.sh; do "$t"; done
 
 ## Phase 3 — Test coverage (biggest gap)
 
-- [ ] **3.0** Extract stage resolution + argument parsing from `install.sh`
+- [x] **3.0** Extract stage resolution + argument parsing from `install.sh`
       into a sourceable `lib/stages.sh`; `install.sh` becomes a thin caller
       (enables 3.1/3.3 without executing the installer)
-- [ ] **3.1** `tests/stage_resolution_test.sh` — `--select` pulls dependencies
+- [x] **3.1** `tests/stage_resolution_test.sh` — `--select` pulls dependencies
       in canonical order; invalid/empty stage names fail; cycle guard (2.2)
       terminates
-- [ ] **3.2** `tests/pkg_test.sh` — `pkg_install` skips installed packages;
+- [x] **3.2** `tests/pkg_test.sh` — `pkg_install` skips installed packages;
       `pkg_remove` refuses without confirmation, honors
       `ACCEPT_PACKAGE_REMOVALS` (mock `rpm`/`dnf` via PATH stubs)
-- [ ] **3.3** `tests/arg_parse_test.sh` — `--select`/`--target-user` reject
+- [x] **3.3** `tests/arg_parse_test.sh` — `--select`/`--target-user` reject
       missing and `--`-prefixed values; unknown options fail
-- [ ] **3.4** `tests/finalize_guard_test.sh` — D2.3 behavior: refuses without
+- [x] **3.4** `tests/finalize_guard_test.sh` — D2.3 behavior: refuses without
       markers, lists missing stages, proceeds with `--force`
-- [ ] **3.5** CI "Tests" step runs all `tests/*_test.sh` in a loop —
+- [x] **3.5** CI "Tests" step runs all `tests/*_test.sh` in a loop —
       `.github/workflows/ci.yml`
 
 ## Phase 4 — Documentation & process (polish)

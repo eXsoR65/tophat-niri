@@ -23,6 +23,9 @@ declare -A STAGE_DEPENDENCIES=(
 declare -A STAGE_WANTED=()
 declare -A STAGE_RESOLVING=()
 
+# Resolved execution plan (populated by resolve_stages)
+STAGES=()
+
 # CLI option defaults (populated by parse_args; exported for helpers/stages)
 export DRY_RUN=false
 export SELECTIVE_STAGES=""

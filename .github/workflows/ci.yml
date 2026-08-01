@@ -40,4 +40,7 @@ jobs:
 
       - name: Tests
         run: |
-          tests/helpers_test.sh
+          for test_file in tests/*_test.sh; do
+            echo "=== Running $test_file ==="
+            "$test_file"
+          done
