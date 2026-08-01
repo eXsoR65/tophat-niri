@@ -32,9 +32,11 @@ fi
 # -----------------------------------------------------------------------------
 log_info "Running 'dms setup' as $TARGET_USER..."
 if [[ "$DRY_RUN" == true ]]; then
-  log_info "[DRY-RUN] Would run: su - $TARGET_USER -c 'dms setup'"
+  log_info "[DRY-RUN] Would run 'dms setup' as $TARGET_USER"
 else
-  if output=$(timeout 30 su - "${TARGET_USER}" -c "dms setup" 2>&1); then
+  # timeout runs inside the sanitized user environment because it cannot
+  # wrap the target_user_command shell function directly.
+  if output=$(target_user_command timeout 30 dms setup 2>&1); then
     log_ok "'dms setup' completed successfully"
   elif [[ $? -eq 124 ]]; then
     log_warn "'dms setup' timed out after 30s (likely needs interactive login)"
