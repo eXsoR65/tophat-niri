@@ -8,6 +8,30 @@ run_finalize_stage() {
     return 0
   fi
 
+  # Guard: never mark a system complete while earlier stages have not run.
+  # A false .completed marker would mislead later runs. Extras is excluded
+  # because it is intentionally marker-less when no opt-ins are enabled.
+  if [[ "$FORCE" != true && "$DRY_RUN" != true ]]; then
+    local missing_stages=()
+    local required_stage
+    for required_stage in preflight repos packaging config services; do
+      if [[ ! -f "$SETUP_STATE_DIR/stage-${required_stage}.done" ]]; then
+        missing_stages+=("$required_stage")
+      fi
+    done
+
+    if [[ ${#missing_stages[@]} -gt 0 ]]; then
+      local missing_csv
+      missing_csv="$(
+        IFS=,
+        echo "${missing_stages[*]}"
+      )"
+      log_error "Refusing to finalize: incomplete stages: ${missing_stages[*]}"
+      log_error "Run them first (--select $missing_csv) or re-run with --force"
+      exit 1
+    fi
+  fi
+
   # Defensive defaults (needed when preflight was skipped)
   FEDORA_VERSION="${FEDORA_VERSION:-unknown}"
   GPU_VENDOR="${GPU_VENDOR:-unknown}"
