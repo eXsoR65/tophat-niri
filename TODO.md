@@ -40,18 +40,18 @@ for t in tests/*_test.sh; do "$t"; done
 
 ## Phase 2 — Correctness & robustness (behavioral)
 
-- [ ] **2.1** Make the banner version-agnostic: compute padding from
+- [x] **2.1** Make the banner version-agnostic: compute padding from
       `TOPHAT_VERSION` length instead of hardcoded spaces — `install.sh`
-- [ ] **2.2** Add a visited-set cycle guard to `stage_add_with_dependencies` —
+- [x] **2.2** Add a visited-set cycle guard to `stage_add_with_dependencies` —
       `install.sh` (later moved to `lib/stages.sh` in Phase 3)
-- [ ] **2.3** Finalize hard guard per **D2.3**: verify all earlier stage
+- [x] **2.3** Finalize hard guard per **D2.3**: verify all earlier stage
       markers exist before running; error out listing missing stages unless
       `--force` — `lib/finalize/all.sh`
-- [ ] **2.4** Deduplicate Intel Wi-Fi detection: add a reliability flag set by
+- [x] **2.4** Deduplicate Intel Wi-Fi detection: add a reliability flag set by
       preflight when `lspci` was available; `hardware_firmware.sh` re-detects
       only when the earlier check was unreliable —
       `lib/preflight/detect_hardware.sh`, `lib/packaging/hardware_firmware.sh`
-- [ ] **2.5** Replace `su - "$TARGET_USER" -c "dms setup"` with
+- [x] **2.5** Replace `su - "$TARGET_USER" -c "dms setup"` with
       `target_user_command` per **D2.5**, keeping timeout + graceful
       degradation — `lib/config/user_services.sh`
 
