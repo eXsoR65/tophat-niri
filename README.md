@@ -1,9 +1,9 @@
 # Tophat
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/Tophat-logo_transperant-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="./assets/Tophat-logo_transperant-light.svg">
-  <img src="./assets/Tophat-logo_transperant-light.svg" alt="Tophat logo" width="270" height="270">
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/Tophat-logo_transparent-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="./assets/Tophat-logo_transparent-light.svg">
+  <img src="./assets/Tophat-logo_transparent-light.svg" alt="Tophat logo" width="270" height="270">
 </picture>
 
 **An opinionated Fedora niri + dms workstation installer.**
@@ -168,6 +168,7 @@ runs unless `--force` is used.
 
 ```text
 install.sh                 Main installer
+lib/stages.sh              Stage registry, dependency resolver, and CLI parsing
 lib/helpers/               Logging, checks, package helpers
 lib/preflight/             Environment, hardware, and update checks
 lib/repos/                 RPM Fusion and COPR setup
@@ -177,7 +178,38 @@ lib/services/              System service setup, including DMS Greeter
 lib/extras/                Optional Flatpak, Distrobox, and Homebrew setup
 lib/finalize/              Cleanup and completion marker
 packages/                  Package list files, including conditional Intel Wi-Fi firmware
+tests/                     Shell test suite (run by CI)
 ```
+
+## Local development
+
+CI runs five gates on every push to `main`/`dev` and on pull requests. Run the
+same checks locally before committing:
+
+```bash
+# 1. Bash syntax
+find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+bash -n install.sh
+
+# 2. ShellCheck (Fedora: sudo dnf install ShellCheck)
+mapfile -t shell_files < <(find lib tests kickstart -type f -name '*.sh' -print | sort)
+shellcheck -s bash -x -e SC1090,SC1091 install.sh "${shell_files[@]}"
+
+# 3. Formatting (shfmt: go install mvdan.cc/sh/v3/cmd/shfmt@latest,
+#    or download a release binary from https://github.com/mvdan/sh/releases)
+shfmt -d -i 2 -ci install.sh lib tests kickstart
+
+# 4. Kickstart safety validation
+kickstart/validate-kickstart.sh
+
+# 5. Test suite
+for test_file in tests/*_test.sh; do "$test_file"; done
+```
+
+Tests are plain Bash scripts using PATH stubs for system commands (rpm, dnf,
+runuser), so they run safely on any machine without root or a real Fedora
+system. New test files matching `tests/*_test.sh` are picked up by CI
+automatically.
 
 ## After install
 

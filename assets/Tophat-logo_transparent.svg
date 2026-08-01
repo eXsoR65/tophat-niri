@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" role="img" aria-labelledby="title">
-  <title id="title">Tophat-logo transperant</title>
+  <title id="title">Tophat-logo transparent</title>
   <style>
     .dark-theme { display: none; }
     @media (prefers-color-scheme: dark) {
