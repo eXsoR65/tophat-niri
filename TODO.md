@@ -75,14 +75,15 @@ for t in tests/*_test.sh; do "$t"; done
 
 ## Phase 4 — Documentation & process (polish)
 
-- [ ] **4.1** Add "Local development" section to README covering the 5 CI
+- [x] **4.1** Add "Local development" section to README covering the 5 CI
       gates and installing `shellcheck`/`shfmt` on Fedora
-- [ ] **4.2** Bump `VERSION` 2.1 → 2.2 after Phases 1–2 land; sync the
+- [x] **4.2** Bump `VERSION` 2.1 → 2.2 after Phases 1–2 land; sync the
       `install.sh` header comment
-- [ ] **4.3** (Optional) Rename `assets/*transperant*` → `*transparent*` with
-      README refs updated — low value, do only if touching those files anyway
-- [ ] **4.4** Decide the fate of the `dotfiles.sh` stub: keep documented, or
-      add a real opt-in consistent with the extras file-presence pattern
+- [x] **4.3** (Optional) Rename `assets/*transperant*` → `*transparent*` with
+      README refs updated ✔ done (files, SVG titles, README refs)
+- [x] **4.4** Decide the fate of the `dotfiles.sh` stub ✔ **keep as documented
+      stub** — no spec exists for repo URL or linking strategy; an
+      extras-style opt-in would be guesswork without requirements
 
 ## Suggested commit order
 

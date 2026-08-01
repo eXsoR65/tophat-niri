@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-#  Tophat v2.1 — Fedora niri workstation installer
+#  Tophat v2.2 — Fedora niri workstation installer
 #  Transforms a base Fedora installation into a fully configured workstation
 #  running niri + DankMaterialShell.
 # =============================================================================
