@@ -64,7 +64,7 @@ run_finalize_stage() {
 
   log_ok "Tophat setup complete!"
   log_info "A reboot is recommended before starting your niri + DMS session"
-  log_info "After first login running command: dms setup & dms greeter sync"
+  log_info "After first graphical login, run: dms setup && dms greeter sync"
   log_info "State files: $SETUP_STATE_DIR"
   log_info "Full log: $SETUP_LOG"
 }

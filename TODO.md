@@ -13,9 +13,10 @@ for t in tests/*_test.sh; do "$t"; done
 
 ## Design decisions (locked in)
 
-- **D2.5:** `dms setup` invocation in `config/user_services.sh` will be
-  **replaced** with the sanitized `target_user_command` runner (no more
-  `su -`). Keep the 30s timeout + graceful degradation behavior.
+- **D2.5 (superseded):** `dms setup` was first moved to
+  `target_user_command`, then removed entirely — it requires a graphical
+  session and never worked from the installer. Post-login message in
+  `finalize` + README covers it.
 - **D2.3:** Finalize stage gets a **hard guard**, not a dependency change:
   when finalize runs and any earlier stage marker is missing, it exits with an
   error listing the missing stages unless `--force` is given. Rationale:
@@ -54,6 +55,7 @@ for t in tests/*_test.sh; do "$t"; done
 - [x] **2.5** Replace `su - "$TARGET_USER" -c "dms setup"` with
       `target_user_command` per **D2.5**, keeping timeout + graceful
       degradation — `lib/config/user_services.sh`
+      *(superseded: invocation removed entirely, see D2.5)*
 
 ## Phase 3 — Test coverage (biggest gap)
 

@@ -29,28 +29,11 @@ fi
 
 # -----------------------------------------------------------------------------
 # DMS Setup — generates starter niri configs
+# 'dms setup' requires a graphical session and never succeeds from this root
+# installer context, so Tophat intentionally does not run it. The finalize
+# summary reminds the user to run it after the first graphical login.
 # -----------------------------------------------------------------------------
-log_info "Running 'dms setup' as $TARGET_USER..."
-if [[ "$DRY_RUN" == true ]]; then
-  log_info "[DRY-RUN] Would run 'dms setup' as $TARGET_USER"
-else
-  # timeout runs inside the sanitized user environment because it cannot
-  # wrap the target_user_command shell function directly. Output goes to a
-  # file (never $(...)) and stdin is detached: a background child of dms
-  # inheriting the pipe would otherwise hold it open and block the installer
-  # forever, even after timeout kills dms itself. -k escalates to SIGKILL.
-  dms_setup_log="$(mktemp)"
-  if target_user_command timeout -k 5 30 dms setup </dev/null >"$dms_setup_log" 2>&1; then
-    log_ok "'dms setup' completed successfully"
-  elif [[ $? -eq 124 || $? -eq 137 ]]; then
-    log_warn "'dms setup' timed out after 30s (likely needs interactive login)"
-    log_warn "Run manually after first login: dms setup"
-  else
-    log_warn "'dms setup' encountered issues (can be retried later)"
-    log_warn "$(cat "$dms_setup_log")"
-  fi
-  rm -f "$dms_setup_log"
-fi
+log_info "Skipping 'dms setup' (requires graphical session) — run it after first login"
 
 # -----------------------------------------------------------------------------
 # DMS systemd user service — create symlink directly
@@ -88,5 +71,4 @@ fi
 log_ok "User configuration complete"
 log_info ""
 log_info "Do NOT add 'dms run' to niri config — the systemd service handles startup."
-log_info "If 'dms setup' was skipped, run it manually after first graphical login."
 log_info ""
