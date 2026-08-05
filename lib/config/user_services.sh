@@ -35,16 +35,21 @@ if [[ "$DRY_RUN" == true ]]; then
   log_info "[DRY-RUN] Would run 'dms setup' as $TARGET_USER"
 else
   # timeout runs inside the sanitized user environment because it cannot
-  # wrap the target_user_command shell function directly.
-  if output=$(target_user_command timeout 30 dms setup 2>&1); then
+  # wrap the target_user_command shell function directly. Output goes to a
+  # file (never $(...)) and stdin is detached: a background child of dms
+  # inheriting the pipe would otherwise hold it open and block the installer
+  # forever, even after timeout kills dms itself. -k escalates to SIGKILL.
+  dms_setup_log="$(mktemp)"
+  if target_user_command timeout -k 5 30 dms setup </dev/null >"$dms_setup_log" 2>&1; then
     log_ok "'dms setup' completed successfully"
-  elif [[ $? -eq 124 ]]; then
+  elif [[ $? -eq 124 || $? -eq 137 ]]; then
     log_warn "'dms setup' timed out after 30s (likely needs interactive login)"
     log_warn "Run manually after first login: dms setup"
   else
     log_warn "'dms setup' encountered issues (can be retried later)"
-    log_warn "$output"
+    log_warn "$(cat "$dms_setup_log")"
   fi
+  rm -f "$dms_setup_log"
 fi
 
 # -----------------------------------------------------------------------------
