@@ -2,7 +2,7 @@
 
 Status: **planning** (no code yet)
 Frontend stack: [OpenTUI](https://opentui.com) + React bindings + Bun
-Tracking: this document (not TODO.md — Phases 1–4 there are done)
+Tracking: this document (not `docs/TODO.md` — Phases 1–4 there are done)
 
 ## Context
 
