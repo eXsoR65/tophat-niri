@@ -30,6 +30,7 @@ stub_dir="$tmp_dir/bin"
 mkdir -p "$stub_dir"
 export STUB_HOME="$tmp_dir/fake-home"
 export DMS_TRIPWIRE="$tmp_dir/dms-was-called"
+export XDG_USER_DIRS_CALL="$tmp_dir/xdg-user-dirs-call"
 mkdir -p "$STUB_HOME"
 
 # getent: report a fake home inside the temp dir (avoid touching real $HOME)
@@ -49,13 +50,41 @@ echo "called with: $*" >"$DMS_TRIPWIRE"
 exit 0
 STUB
 
-chmod +x "$stub_dir/getent" "$stub_dir/dms"
+# xdg-user-dirs-update: record the user environment and model its directory creation
+cat >"$stub_dir/xdg-user-dirs-update" <<'STUB'
+#!/bin/bash
+printf '%s|%s|%s\n' "$HOME" "$USER" "$*" >"$XDG_USER_DIRS_CALL"
+mkdir -p \
+  "$HOME/Desktop" \
+  "$HOME/Documents" \
+  "$HOME/Downloads" \
+  "$HOME/Music" \
+  "$HOME/Pictures" \
+  "$HOME/Public" \
+  "$HOME/Templates" \
+  "$HOME/Videos"
+STUB
+
+chmod +x "$stub_dir/getent" "$stub_dir/dms" "$stub_dir/xdg-user-dirs-update"
 export PATH="$stub_dir:$PATH"
 
 # shellcheck source=lib/helpers/run_logged.sh
 source "$ROOT/lib/helpers/run_logged.sh"
 # shellcheck source=lib/helpers/checks.sh
 source "$ROOT/lib/helpers/checks.sh"
+# shellcheck source=lib/helpers/pkg.sh
+source "$ROOT/lib/helpers/pkg.sh"
+
+# Exercise run_as_target_user without requiring root in the test process.
+target_user_command() {
+  env -i \
+    "HOME=$TARGET_USER_HOME" \
+    "USER=$TARGET_USER" \
+    "LOGNAME=$TARGET_USER" \
+    "PATH=$stub_dir:$PATH" \
+    "XDG_USER_DIRS_CALL=$XDG_USER_DIRS_CALL" \
+    "$@"
+}
 
 fail() {
   echo "FAIL: $1" >&2
@@ -71,6 +100,16 @@ source "$SRC_FILE"
 grep -q "Skipping 'dms setup'" "$SETUP_LOG" ||
   fail "post-login 'dms setup' guidance not logged"
 
+# --- XDG package is installed and directories are initialized as target user -
+grep -qxF "xdg-user-dirs" "$SETUP_PACKAGES/desktop-support.packages" ||
+  fail "xdg-user-dirs missing from desktop support packages"
+[[ "$(cat "$XDG_USER_DIRS_CALL")" == "${STUB_HOME}|${TARGET_USER}|" ]] ||
+  fail "xdg-user-dirs-update did not run with the target user's environment"
+
+for user_dir in Desktop Documents Downloads Music Pictures Public Templates Videos; do
+  [[ -d "$STUB_HOME/$user_dir" ]] || fail "$user_dir was not created in target home"
+done
+
 # --- Fake home was configured, real HOME untouched ----------------------------
 [[ -d "$STUB_HOME/.config/niri" ]] || fail "config dirs not created in target home"
 [[ -d "$STUB_HOME/.config/environment.d" ]] ||
@@ -80,5 +119,11 @@ grep -q "Skipping 'dms setup'" "$SETUP_LOG" ||
 # --- Missing dms.service warns instead of failing -----------------------------
 grep -q "Could not find dms.service" "$SETUP_LOG" ||
   fail "missing dms.service did not produce a warning"
+
+# --- Dry run reports but does not execute xdg-user-dirs-update ----------------
+rm -f "$XDG_USER_DIRS_CALL"
+DRY_RUN=true
+source "$SRC_FILE" >/dev/null
+[[ ! -e "$XDG_USER_DIRS_CALL" ]] || fail "xdg-user-dirs-update ran during dry run"
 
 echo "config_stage_test.sh: PASS"

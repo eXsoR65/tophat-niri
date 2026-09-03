@@ -28,6 +28,12 @@ if [[ "$DRY_RUN" != true ]]; then
 fi
 
 # -----------------------------------------------------------------------------
+# XDG user directories
+# -----------------------------------------------------------------------------
+run_as_target_user "Creating standard user directories for $TARGET_USER" \
+  xdg-user-dirs-update
+
+# -----------------------------------------------------------------------------
 # DMS Setup — generates starter niri configs
 # 'dms setup' requires a graphical session and never succeeds from this root
 # installer context, so Tophat intentionally does not run it. The finalize

@@ -20,6 +20,9 @@ xdg-desktop-portal-gnome
 gnome-keyring
 gnome-keyring-pam
 
+# Standard Desktop, Documents, Downloads, and other user directories
+xdg-user-dirs
+
 # Xwayland satellite for niri
 xwayland-satellite
 

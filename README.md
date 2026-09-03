@@ -41,6 +41,7 @@ workstation using [niri](https://github.com/niri-wm/niri) and [DankMaterialShell
 - Intel Wi-Fi firmware if Intel Wi-Fi hardware is detected
 - Configures niri and dms systemd service
 - Configures greetd PAM hooks so GNOME Keyring unlocks/starts on login
+- Creates the target user's standard XDG directories (Desktop, Documents, Downloads, etc.)
 
 ## Usage
 
