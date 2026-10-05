@@ -111,7 +111,7 @@ stage (`--select`), view full log, abort.
 - Separate `tui` CI job (bun setup, `bun install --frozen-lockfile`,
   `bun test`, `bun build`). Independent of the five Bash gates; both must pass
   once the TUI lands on `main`.
-- Manual: the Proxmox software-rendering VM doubles as the TUI test bed.
+- Manual: a physical laptop (real GPU) is the TUI test bed.
 
 ## Risks / watch items
 
