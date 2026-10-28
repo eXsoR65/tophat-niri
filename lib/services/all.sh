@@ -25,7 +25,8 @@ write_greetd_config() {
   local backup=""
 
   if [[ -f "$config_file" ]]; then
-    if diff -q <(_greetd_config_body) "$config_file" >/dev/null 2>&1; then
+    # cmp, not diff: diffutils is not guaranteed on a Fedora Minimal install.
+    if cmp -s <(_greetd_config_body) "$config_file"; then
       log_ok "greetd config already up to date: $config_file"
       return 0
     fi

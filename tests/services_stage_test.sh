@@ -52,7 +52,7 @@ config_file="$tmp_dir/config.toml"
 
 # --- A fresh config is written ------------------------------------------------
 write_greetd_config "$config_file" >/dev/null
-diff -q "$expected_config" "$config_file" >/dev/null || fail "greeter config content wrong"
+cmp -s "$expected_config" "$config_file" || fail "greeter config content wrong"
 find "$tmp_dir" -name 'config.toml.tophat-backup.*' | grep -q . &&
   fail "backup created when there was nothing to preserve"
 
@@ -74,7 +74,7 @@ write_greetd_config "$custom_config" >/dev/null
 backup="$(find "$(dirname "$custom_config")" -name 'config.toml.tophat-backup.*' | head -1)"
 [[ -n "$backup" ]] || fail "custom greeter config was not backed up"
 grep -q "my own customisation" "$backup" || fail "backup does not hold the original content"
-diff -q "$expected_config" "$custom_config" >/dev/null || fail "custom config was not replaced"
+cmp -s "$expected_config" "$custom_config" || fail "custom config was not replaced"
 grep -q "backed up" "$SETUP_LOG" || fail "backup not logged"
 
 # --- A completed stage is skipped --------------------------------------------
