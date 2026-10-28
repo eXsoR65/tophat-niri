@@ -42,6 +42,7 @@ SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=
 
 DRY_RUN="${DRY_RUN:-0}"
 KEEP="${KEEP:-0}"
+VM_PREEXISTING=0
 REPO_TARBALL="${REPO_TARBALL:-}"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -106,6 +107,12 @@ cleanup() {
     return
   fi
   [[ -n "${VMID:-}" ]] || return 0
+  # Only ever destroy a VM this run created. A caller-supplied VMID may name an
+  # existing machine, and `qm destroy --purge` also removes its volumes.
+  if [[ "$VM_PREEXISTING" == 1 ]]; then
+    echo "Refusing to touch VM $VMID: it already existed before this run"
+    return 0
+  fi
   if [[ "$DRY_RUN" == 1 ]]; then
     echo "[dry-run] would stop and destroy VM $VMID"
     return 0
@@ -131,6 +138,11 @@ if [[ -z "$VMID" ]]; then
   else
     VMID="$(qm nextid)"
   fi
+fi
+
+if [[ "$DRY_RUN" != 1 ]] && qm status "$VMID" >/dev/null 2>&1; then
+  VM_PREEXISTING=1
+  echo "VM $VMID already exists; this run will not create or destroy it"
 fi
 
 echo "Cloning template $TEMPLATE_VMID -> VM $VMID"

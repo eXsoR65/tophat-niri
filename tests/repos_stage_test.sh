@@ -81,7 +81,7 @@ makecache_count="$(grep -c "makecache" "$DNF_CALLS" || true)"
   fail "expected exactly one dnf makecache, got $makecache_count"
 
 # --- The stage marker short-circuits a re-run --------------------------------
-date '+%Y-%m-%d %H:%M:%S' >"$SETUP_STATE_DIR/stage-repos.done"
+stage_marker_write repos
 : >"$DNF_CALLS"
 run_repos_stage >/dev/null
 [[ ! -s "$DNF_CALLS" ]] || fail "marked stage still called dnf: $(cat "$DNF_CALLS")"

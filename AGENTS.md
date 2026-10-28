@@ -5,7 +5,7 @@ first; the README covers user-facing usage.
 
 ## Project identity
 
-- **Name:** Tophat (version in `VERSION`, currently 2.5; last release: v2.4)
+- **Name:** Tophat (version in `VERSION`, currently 2.7; last release: v2.4)
 - **Purpose:** Opinionated installer that transforms a **Fedora Minimal**
   install into a **niri + DankMaterialShell (DMS)** workstation. Inspired by
   Omarchy's staged flow.
@@ -90,6 +90,13 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
    markers live at `$SETUP_STATE_DIR/stage-<stage>.done`. `skip_stage` marks a
    stage skipped *without* writing a marker (used by extras so later opt-in
    files are discovered). `--force` bypasses markers.
+
+   Markers record *what* was completed: `completed=`, `version=`, `user=`, plus
+   a verbatim snapshot of the package lists in `stage-<stage>.config`
+   (`_tophat_config_snapshot`). A marker is honoured only when the version, the
+   target user and the package selection all still match; otherwise the stage
+   re-runs with a logged reason. The snapshot is compared as text because
+   `sha256sum`/`cksum` are not guaranteed on Fedora Minimal.
 2. **Dry run**: `run_logged` prints the command and returns 0. File writes must
    be manually gated with `[[ "$DRY_RUN" != true ]]`. Dry-run logs go to
    `${TMPDIR:-/tmp}`, not `/var/log/tophat`.
@@ -106,9 +113,19 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
    `$(...)`: a spawned grandchild inheriting stdout holds the pipe open and
    hangs the caller — redirect to a file with stdin detached instead.
 7. **Destructive actions** require `--accept-package-removals` or a TTY
-   confirmation (`pkg_remove`).
+   confirmation: `pkg_remove` for the replacement list, and `finalize`'s
+   `dnf autoremove` (which can remove more than that list, since it removes
+   whatever the solver calls unneeded). Without consent the autoremove is
+   skipped, with a message telling the user to run it themselves.
 8. **Logs/state**: live runs write `/var/log/tophat/runs/<timestamp>.log`
    (0640) with `latest.log` symlink, and state under `/var/lib/tophat/`.
+9. **One run at a time**: `acquire_run_lock` takes `$SETUP_STATE_DIR/.lock.d`
+   via atomic `mkdir` (not `flock`, which is not guaranteed on a Minimal
+   install) and records its pid, so a killed run's lock is recognised as stale
+   and broken instead of blocking forever. Because the directory exists for a
+   moment before the pid is written, a missing pid file is not treated as proof
+   of death: contenders wait up to 3 s for it. Reclaiming a stale lock renames
+   it away first, so exactly one contender can win. Dry runs take no lock.
 
 ## Known quirks / rough edges
 
@@ -116,18 +133,27 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
   `INTEL_WIFI_DETECTION_RELIABLE` is not true — i.e., preflight ran without
   `lspci` (minimal install before pciutils) or preflight never ran.
 - `dotfiles.sh` is an intentional stub.
+- `wget` is deliberately not installed: Fedora 44+ has no package by that name
+  (it split into `wget1`/`wget2` with `-wget` subpackages that provide the
+  binary, so `dnf install wget` depended on provides resolution with two
+  candidates). `curl` covers downloads and Tophat itself never calls `wget`.
 - `preflight` refuses to run off Fedora: `require_fedora` checks
   `ID=fedora` in `/etc/os-release` *before* the first `rpm` call, so a
   non-Fedora host gets a clear message instead of `rpm: command not found`.
   It takes an explicit path, which is how the test exercises it.
-- `services` writes `/etc/greetd/config.toml` only when it differs, and backs up
-  a differing file to `<path>.tophat-backup.<timestamp>` first — a hand-edited
-  greeter config survives a `--force` re-run.
+- `services` writes `/etc/greetd/config.toml` only when it differs, backs a
+  differing file up to `<path>.tophat-backup.<timestamp>`, and installs it with
+  a same-directory `mktemp` + `mv` so a partial write can never leave the
+  machine without a greeter. `/etc/pam.d/greetd` is backed up the same way, and
+  each gnome-keyring hook (auth/session/password) is verified individually — a
+  file can mention `pam_gnome_keyring.so` on one line and still not auto-start
+  the keyring.
 - `config` chowns only the paths it creates (the three `~/.config` subtrees),
   not `~/.config` recursively.
 - `--select finalize` refuses to run (and won't write `.completed`) while any
-  of preflight/repos/packaging/config/services markers are missing, unless
-  `--force` is given (D2.3).
+  of preflight/repos/packaging/config/services markers are missing. `--force`
+  does **not** bypass this: a false `.completed` marker would mislead every
+  later run, so force only re-runs stages (D2.3, revised in v2.6).
 
 ## Planned work
 
@@ -158,12 +184,26 @@ for t in tests/*_test.sh; do "$t"; done             # 11 files: helpers, pkg, ar
 The `shell` job also asserts that `VERSION` matches the version in the
 `install.sh` header, which nothing else checks.
 
+Inside the Fedora containers the job additionally walks **all seven stages** as
+a `./install.sh --dry-run` against a throwaway user, which is the closest CI can
+get to a real install without a VM. `docs/INTEGRATION-TESTING.md` records what
+still needs a VM or a real GPU, and the manual procedure for both.
+
 Two jobs: `shell` on `ubuntu-latest` runs all five gates above. `fedora` runs
-inside a `fedora:latest` container and covers only what genuinely needs Fedora —
-bash syntax, the kickstart validator, the test suite, and `./install.sh
---version` / `--help` smoke tests. Lint and format stay on Ubuntu: depending on
-Fedora's ShellCheck/shfmt packaging makes a gate fail for reasons unrelated to
-whether the installer works. The fedora job pulls the image in its own step and
+inside a container matrix of `fedora:latest` (the current release) and
+`fedora:45` (the next one), covering only what genuinely needs Fedora — bash
+syntax, the kickstart validator, the test suite, `./install.sh --version` /
+`--help` smoke tests, and two release-readiness checks:
+
+- every package Tophat installs from Fedora's own repositories resolves on that
+  release (`dnf repoquery`; COPR-provided packages are excluded)
+- RPM Fusion's release RPMs and the four COPR chroots (niri, dms, danklinux,
+  ghostty) exist for that release
+
+Those two catch the failure modes our own code cannot fix: a renamed or retired
+package name, or an upstream repository with no tree for the new release. Lint
+and format stay on Ubuntu: depending on Fedora's ShellCheck/shfmt packaging
+makes a gate fail for reasons unrelated to whether the installer works. The fedora job pulls the image in its own step and
 re-emits a failed container's output tail as a single annotation, because
 container stdout is otherwise invisible to tooling (GitHub also caps annotations
 at ~10 per step).
@@ -171,7 +211,9 @@ at ~10 per step).
 Releases: push an annotated tag `v<version>` matching `VERSION`;
 `.github/workflows/release.yml` re-runs the gates, fails on a VERSION/tag
 mismatch, then publishes a source archive + `SHA256SUMS` and opens the release
-with the tag annotation as its body. Never create releases by hand.
+with the tag annotation as its body. The archive is reproducible: `git archive`
+to tar, `gzip -n`, and the workflow rebuilds it once to compare digests. Never
+create releases by hand.
 
 **Run all five before considering a change done.** Style: shfmt `-i 2 -ci`,
 ShellCheck-clean (SC1090/SC1091 exempt for dynamic sourcing), shellcheck

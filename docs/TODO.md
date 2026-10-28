@@ -1,6 +1,6 @@
 # TODO — Tophat Improvement Plan
 
-Derived from the codebase review (see `.agent.md`). Items are grouped into
+Derived from the codebase review (see `AGENTS.md`). Items are grouped into
 phases; each phase should land with all CI gates green:
 
 ```bash
@@ -166,6 +166,84 @@ a target machine except the new `--version` flag.
 - [x] **7.7** `homebrew.sh`'s temporary installer file: the `EXIT` trap is the
       only one in the script and is cleared on the success path, so it is left as
       is and documented here rather than replaced.
+
+## Phase 8 — Fedora 45 readiness (verified 2026-10-27)
+
+Fedora 45 was still pre-GA when this was checked (no `releases/45` tree on the
+mirrors yet; only `development/45`), so everything below is verified against the
+branched tree and a real `fedora:45` container, not a released Fedora.
+
+- [x] **8.1** Code runs on Fedora 45: all 11 tests, the kickstart validator and
+      the `--version`/`--help` smoke tests pass inside `fedora:45`.
+- [x] **8.2** Every package Tophat installs from Fedora's own repositories
+      resolves on F45 (48 packages). `wget` was the only casualty — the package
+      name is gone in 44 and 45, so it is no longer installed.
+- [x] **8.3** Upstream repositories publish F45: RPM Fusion free/nonfree
+      `-release-45` RPMs exist, and niri/dms/danklinux/ghostty all have
+      `fedora-45` chroots (x86_64 and aarch64).
+- [x] **8.4** CI now runs the Fedora job as a matrix over `fedora:latest` and
+      `fedora:45` and enforces both checks above, so the next release is tested
+      before it ships rather than after.
+- [ ] **8.5** Re-run the Fedora job once F45 is actually GA: RPM Fusion swaps
+      its release RPMs from `development/45` to `releases/45` at GA, and that
+      path is the one real installs will use.
+- [ ] **8.6** Live validation of v2.5 (and F45) on the laptop, since v2.5
+      changes installer behaviour.
+
+## Phase 9 — Installation safety (review Phase A)
+
+From the 2026-10-28 repository review. The theme is installing/rerunning safety,
+not new features.
+
+- [x] **9.1** `--select` validation: an empty value used to mean "no selection",
+      i.e. install everything. Empty, leading/trailing and doubled commas are now
+      rejected, with the stage list echoed back.
+- [x] **9.2** `dnf autoremove` in `finalize` is opt-in: it previews the
+      transaction (`--assumeno`), then removes only with
+      `--accept-package-removals` or a TTY confirmation. Otherwise it is skipped
+      with guidance.
+- [x] **9.3** `finalize`'s prerequisite guard is no longer bypassable with
+      `--force` — force re-runs stages, it does not let an incomplete install be
+      marked complete.
+- [x] **9.4** Greeter config is written atomically (same-directory temp file +
+      rename) after its backup, and `/etc/pam.d/greetd` is backed up before
+      modification with every gnome-keyring hook verified individually.
+- [x] **9.5** Release workflow: `contents: write` is scoped to the publishing
+      job; the verify job runs with `contents: read`.
+- [x] **9.6** README release example derives the tag from `VERSION`, so it can no
+      longer go stale (it said v2.4 while the source said 2.5).
+- [ ] **9.7** *Needs repository admin, not code:* protect `main` — require the
+      `shell` and `fedora` checks, block force-pushes, require a PR for changes.
+      Both branches report `protected: false` today.
+- [ ] **9.8** Pin workflow actions to reviewed commit SHAs once Dependabot is
+      keeping them current.
+
+## Phase 10 — Reliability and test infrastructure (review Phases B/C)
+
+- [x] **10.1** Configuration-aware markers: each marker stores version, target
+      user and a snapshot of the package lists; any change re-runs that stage
+      with a logged reason (`tests/marker_invalidation_test.sh`).
+- [x] **10.2** Concurrent runs: atomic `mkdir` lock with a pid file and stale
+      lock breaking; dry runs are exempt (`tests/locking_test.sh`).
+- [x] **10.3** Interruption and failure tests: a failed or interrupted stage
+      never writes a marker, so a rerun resumes instead of skipping
+      (`tests/failure_recovery_test.sh`).
+- [x] **10.4** Failure recovery hint: the error trap says completed stages are
+      recorded and points at `--force` for re-running them.
+- [x] **10.5** Full dry-run install in CI: all seven stages walked on
+      `fedora:latest` and `fedora:45` against a throwaway user.
+- [x] **10.6** Reproducible release archive: `git archive` + `gzip -n`, rebuilt
+      in-workflow and digest-compared before upload.
+- [x] **10.7** `docs/INTEGRATION-TESTING.md` states exactly what CI proves and
+      what needs a VM or GPU, with the manual procedure for each.
+- [x] **10.8a** Automated harness written: `.github/workflows/integration.yml`
+      (dispatched real install in a systemd container) and
+      `tests/integration/container-install.sh`, plus a drafted
+      `tests/integration/proxmox-test.sh` for VM-level runs.
+- [ ] **10.8b** Run the integration workflow once and fix whatever it finds.
+- [ ] **10.8c** Run the VM scenarios in `docs/INTEGRATION-TESTING.md` (fresh
+      install, rerun, interrupted run, upgrade) on a Fedora Minimal VM.
+- [ ] **10.9** Run the real-GPU checklist on the laptop (also covers 8.6).
 
 ## Suggested commit order
 

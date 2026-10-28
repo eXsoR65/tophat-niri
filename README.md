@@ -193,10 +193,11 @@ docs/                      Improvement backlog and the TUI plan
 ## Local development
 
 CI runs five gates on every push to `main`/`dev` and on pull requests. A second
-job re-runs the Fedora-relevant subset inside a `fedora:latest` container (bash
-syntax, kickstart validation, the test suite, and `--version`/`--help` smoke
-tests) so dnf5 and Fedora-specific paths get exercised too. Run the same checks
-locally before committing:
+job re-runs the Fedora-relevant subset inside a container matrix of
+`fedora:latest` and `fedora:45` (bash syntax, kickstart validation, the test
+suite, `--version`/`--help` smoke tests), and also checks on each release that
+every package we install still resolves and that RPM Fusion plus the COPRs we
+depend on publish a tree for it. Run the same checks locally before committing:
 
 ```bash
 # 1. Bash syntax
@@ -228,8 +229,9 @@ automatically.
 Releases are cut from a tag; nothing is published by hand:
 
 ```bash
-git tag -a v2.4 -m "Tophat v2.4"    # VERSION must match the tag (v2.4 -> 2.4)
-git push origin v2.4
+version="$(<VERSION)"
+git tag -a "v${version}" -m "Tophat v${version}"   # tag must match VERSION
+git push origin "v${version}"
 ```
 
 The `Release` workflow then re-runs all five gates, refuses to publish if

@@ -82,6 +82,14 @@ parse_args() {
           echo "Error: --select requires a comma-separated stage list" >&2
           exit 1
         fi
+        # An empty value used to mean "no selection", i.e. install everything —
+        # the opposite of what a script passing "" intends. Only a well-formed
+        # list is accepted: no empty entries, no leading/trailing commas.
+        if [[ ! "$2" =~ ^[[:space:]]*[a-z]+[[:space:]]*(,[[:space:]]*[a-z]+[[:space:]]*)*$ ]]; then
+          echo "Error: --select expects comma-separated stage names (got: '$2')" >&2
+          echo "Available stages: ${ALL_STAGES[*]}" >&2
+          exit 1
+        fi
         SELECTIVE_STAGES="$2"
         shift 2
         ;;
