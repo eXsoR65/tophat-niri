@@ -58,6 +58,9 @@ jobs:
 
       # A failure inside the container is otherwise invisible in the checks
       # UI; re-emit the tail as an annotation so red runs explain themselves.
+      - name: Pull Fedora image
+        run: docker pull --quiet fedora:latest
+
       - name: Run gates on Fedora
         run: |
           set -uo pipefail
@@ -70,14 +73,16 @@ jobs:
           echo "bash:   $(bash --version | head -1)"
           echo "dnf:    $(dnf --version | head -1)"
 
-          # dnf5 exits non-zero on "Nothing to do" when a package is already
-          # present, which would fail the job for a non-reason.
+          # dnf5 exits non-zero when there is nothing to do (packages already
+          # present), so its exit status is not a reliable signal here. Install,
+          # tolerate that, then verify the prerequisites are actually there.
+          dnf install -y --setopt=install_weak_deps=False findutils gawk ||
+            echo "dnf returned non-zero; verifying packages instead of trusting it"
           for pkg in findutils gawk; do
-            if rpm -q "$pkg" >/dev/null 2>&1; then
-              echo "$pkg already present"
-            else
-              dnf install -y --setopt=install_weak_deps=False "$pkg"
-            fi
+            rpm -q "$pkg" >/dev/null 2>&1 || {
+              echo "prerequisite missing: $pkg" >&2
+              exit 1
+            }
           done
 
           echo '=== Bash syntax ==='
@@ -106,5 +111,5 @@ jobs:
           echo "::error::Fedora gate failed; tail is repeated as annotations below"
           while IFS= read -r line; do
             echo "::error::$line"
-          done < <(tail -20 "$log")
+          done < <(tail -40 "$log")
           exit 1
