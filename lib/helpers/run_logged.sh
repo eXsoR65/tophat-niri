@@ -235,7 +235,8 @@ skip_stage() {
 acquire_run_lock() {
   local lock_dir="$SETUP_STATE_DIR/.lock.d"
   local pid_file="$lock_dir/pid"
-  local existing_pid=""
+  local claim_dir="$SETUP_STATE_DIR/.lock.stale.$$"
+  local existing_pid="" attempt
 
   mkdir -p "$SETUP_STATE_DIR"
 
@@ -246,11 +247,18 @@ acquire_run_lock() {
     return 0
   fi
 
-  if [[ -r "$pid_file" ]]; then
-    existing_pid="$(<"$pid_file")"
-    # Defend against a hand-edited or truncated pid file.
-    existing_pid="${existing_pid//[[:space:]]/}"
-  fi
+  # The owner creates the directory before it can publish its pid, so a missing
+  # pid file is not evidence that the owner is gone. Give it a moment: without
+  # this, two installers starting at the same instant both acquire the lock.
+  for ((attempt = 0; attempt < 30; attempt++)); do
+    if [[ -r "$pid_file" ]]; then
+      existing_pid="$(<"$pid_file")"
+      # Defend against a hand-edited or truncated pid file.
+      existing_pid="${existing_pid//[[:space:]]/}"
+      [[ -n "$existing_pid" ]] && break
+    fi
+    sleep 0.1
+  done
 
   if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null; then
     log_error "Another Tophat run is in progress (pid $existing_pid, lock: $lock_dir)"
@@ -258,12 +266,20 @@ acquire_run_lock() {
     return 1
   fi
 
+  # Reclaiming a stale lock must have exactly one winner: rename it away first,
+  # and only the process whose rename succeeds may create the replacement.
+  if ! mv -- "$lock_dir" "$claim_dir" 2>/dev/null; then
+    log_error "Another Tophat run is reclaiming a stale lock; retry in a moment"
+    return 1
+  fi
+  rm -rf -- "$claim_dir"
+
   log_warn "Breaking stale Tophat lock (pid ${existing_pid:-unknown} is gone)"
-  rm -rf -- "$lock_dir"
-  mkdir "$lock_dir" || return 1
+  mkdir "$lock_dir" 2>/dev/null || return 1
   printf '%s\n' "$$" >"$pid_file"
   RUN_LOCK_DIR="$lock_dir"
   trap 'release_run_lock' EXIT
+  return 0
 }
 
 release_run_lock() {

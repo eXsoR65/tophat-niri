@@ -122,7 +122,10 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
 9. **One run at a time**: `acquire_run_lock` takes `$SETUP_STATE_DIR/.lock.d`
    via atomic `mkdir` (not `flock`, which is not guaranteed on a Minimal
    install) and records its pid, so a killed run's lock is recognised as stale
-   and broken instead of blocking forever. Dry runs do not take the lock.
+   and broken instead of blocking forever. Because the directory exists for a
+   moment before the pid is written, a missing pid file is not treated as proof
+   of death: contenders wait up to 3 s for it. Reclaiming a stale lock renames
+   it away first, so exactly one contender can win. Dry runs take no lock.
 
 ## Known quirks / rough edges
 

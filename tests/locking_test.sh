@@ -42,6 +42,26 @@ release_run_lock
 acquire_run_lock || fail "could not re-acquire after release"
 release_run_lock
 
+# --- A lock whose owner is about to publish its pid is not stolen -----------
+# The owner creates the directory first and writes the pid a moment later; a
+# second run must wait for the pid rather than assume the owner is dead.
+mkdir -p "$SETUP_STATE_DIR/.lock.d"
+owner_pid=$$
+(sleep 0.5 && printf '%s\n' "$owner_pid" >"$SETUP_STATE_DIR/.lock.d/pid") &
+publisher=$!
+if (acquire_run_lock) >/dev/null 2>&1; then
+  fail 'stole a lock whose pid was published late'
+fi
+wait "$publisher" 2>/dev/null || true
+rm -rf "$SETUP_STATE_DIR/.lock.d"
+
+# --- A lock directory with no pid at all is reclaimed after a grace period ---
+mkdir -p "$SETUP_STATE_DIR/.lock.d"
+if ! (acquire_run_lock); then
+  fail 'a lock with no pid was never reclaimed'
+fi
+rm -rf "$SETUP_STATE_DIR/.lock.d"
+
 # --- A stale lock (dead pid) is broken, not obeyed ---------------------------
 mkdir -p "$SETUP_STATE_DIR/.lock.d"
 printf '%s\n' 999999 >"$SETUP_STATE_DIR/.lock.d/pid"
