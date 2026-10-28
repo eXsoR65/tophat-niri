@@ -5,7 +5,6 @@ util-linux
 pciutils
 procps-ng
 iputils
-wget
 curl
 git
 tar

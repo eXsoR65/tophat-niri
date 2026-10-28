@@ -122,23 +122,21 @@ jobs:
           ./install.sh --help >/dev/null
 
           # Every package Tophat installs from Fedora's own repositories must
-          # still resolve on this release. COPR-provided packages are excluded:
-          # they are checked separately below, by chroot.
+          # still resolve on this release. COPR-provided packages are excluded
+          # here and checked separately below, by chroot.
           echo "=== Package resolution on Fedora ${release} ==="
-          {
-            cat packages/base-utils.packages \
-              packages/desktop-support.packages \
-              packages/intel-wifi.packages
-            grep -vE '^(matugen|dgop|dsearch)[[:space:]]*$' packages/dms-companions.packages
-          } | sed 's/#.*//' | sed '/^[[:space:]]*$/d' | sed 's/[[:space:]]*$//' | sort -u >/tmp/pkgs.txt
+          cat packages/base-utils.packages \
+            packages/desktop-support.packages \
+            packages/intel-wifi.packages \
+            packages/dms-companions.packages |
+            sed 's/#.*//' | sed '/^[[:space:]]*$/d' | sed 's/[[:space:]]*$//' |
+            sort -u | grep -vxE '(niri|dms|dms-greeter|matugen|dgop|dsearch)' >/tmp/pkgs.txt
           mapfile -t pkgs < /tmp/pkgs.txt
+          # One query for the whole set: a per-package loop takes minutes.
+          available="$(dnf -q repoquery --available --qf '%{name}' "${pkgs[@]}" | sort -u)"
           missing=()
           for pkg in "${pkgs[@]}"; do
-            # repoquery resolves provides too, so a name that moved packages
-            # (e.g. wget -> wget1-wget/wget2-wget) still counts as available.
-            if ! dnf -q repoquery --available "$pkg" 2>/dev/null | grep -q .; then
-              missing+=("$pkg")
-            fi
+            grep -qxF -- "$pkg" <<<"$available" || missing+=("$pkg")
           done
           if ((${#missing[@]})); then
             echo "NOT RESOLVABLE on Fedora ${release}: ${missing[*]}" >&2
