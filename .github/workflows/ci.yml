@@ -70,7 +70,15 @@ jobs:
           echo "bash:   $(bash --version | head -1)"
           echo "dnf:    $(dnf --version | head -1)"
 
-          dnf install -y --setopt=install_weak_deps=False findutils gawk
+          # dnf5 exits non-zero on "Nothing to do" when a package is already
+          # present, which would fail the job for a non-reason.
+          for pkg in findutils gawk; do
+            if rpm -q "$pkg" >/dev/null 2>&1; then
+              echo "$pkg already present"
+            else
+              dnf install -y --setopt=install_weak_deps=False "$pkg"
+            fi
+          done
 
           echo '=== Bash syntax ==='
           find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
