@@ -37,6 +37,11 @@ jobs:
             /opt/hostedtoolcache/CodeQL /usr/local/share/boost
           df -h /
 
+      # The fedora image is deliberately minimal: it ships dnf, bash and
+      # coreutils-single but no init and no user management tools, so systemd
+      # and shadow-utils (for the harness's useradd) are installed inside it and
+      # systemd is then exec'd as PID 1 (exec replaces bash, so systemd is not a
+      # child process).
       - name: Start a systemd container
         run: |
           docker run -d --name tophat-it \
@@ -44,9 +49,10 @@ jobs:
             --hostname tophat-it \
             --tmpfs /run --tmpfs /run/lock \
             --volume /sys/fs/cgroup:/sys/fs/cgroup:rw \
-            ${{ inputs.container }} /sbin/init
+            ${{ inputs.container }} \
+            /bin/bash -c 'dnf install -y --setopt=install_weak_deps=False systemd shadow-utils && exec /usr/lib/systemd/systemd'
 
-          for attempt in $(seq 1 60); do
+          for attempt in $(seq 1 90); do
             state="$(docker exec tophat-it systemctl is-system-running 2>/dev/null || true)"
             case "$state" in
               running | degraded) echo "systemd is ${state}"; exit 0 ;;
