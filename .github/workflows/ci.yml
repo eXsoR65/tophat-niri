@@ -133,7 +133,8 @@ jobs:
             sort -u | grep -vxE '(niri|dms|dms-greeter|matugen|dgop|dsearch)' >/tmp/pkgs.txt
           mapfile -t pkgs < /tmp/pkgs.txt
           # One query for the whole set: a per-package loop takes minutes.
-          available="$(dnf -q repoquery --available --qf '%{name}' "${pkgs[@]}" | sort -u)"
+          available="$(dnf -q repoquery --available --qf '%{name}\\n' "${pkgs[@]}" | sort -u)"
+          echo "repoquery returned $(grep -c . <<<"$available") names for ${#pkgs[@]} requested packages"
           missing=()
           for pkg in "${pkgs[@]}"; do
             grep -qxF -- "$pkg" <<<"$available" || missing+=("$pkg")
