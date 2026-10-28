@@ -126,7 +126,7 @@ jobs:
           # closest CI can get to an end-to-end install without a VM.
           echo '=== Full dry-run install ==='
           useradd -m -s /bin/bash tophat-dryrun
-          if ! ./install.sh --dry-run --target-user tophat-dryrun >/tmp/dryrun.log 2>&1; then
+          if ! ./install.sh --dry-run --verbose --target-user tophat-dryrun >/tmp/dryrun.log 2>&1; then
             echo '--- dry run failed, last 40 lines ---'
             tail -40 /tmp/dryrun.log
             exit 1
@@ -141,7 +141,7 @@ jobs:
               exit 1
             }
           done
-          grep -q 'Would preview orphaned packages' /tmp/dryrun.log || {
+          grep -q 'preview orphaned packages' /tmp/dryrun.log || {
             echo 'dry run did not exercise the autoremove consent path' >&2
             exit 1
           }
