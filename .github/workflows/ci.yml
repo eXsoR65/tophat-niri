@@ -62,35 +62,42 @@ jobs:
   # narrow: ShellCheck and shfmt stay on Ubuntu (Fedora packaging of both is
   # not something a gate should depend on), and no process substitution is
   # used, so the container needs nothing beyond bash + findutils.
+  #
+  # Two legs: the release Fedora's users are on today, and the next one, so a
+  # new Fedora release is tested before it ships rather than after.
   fedora:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        container: [fedora:latest, fedora:45]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # A failure inside the container is otherwise invisible in the checks
-      # UI; re-emit the tail as an annotation so red runs explain themselves.
-      - name: Pull Fedora image
-        run: docker pull --quiet fedora:latest
+      - name: Pull image (${{ matrix.container }})
+        run: docker pull --quiet ${{ matrix.container }}
 
-      - name: Run gates on Fedora
+      - name: Run gates on ${{ matrix.container }}
         run: |
           set -uo pipefail
           log="$(mktemp)"
           if docker run --rm -i --volume "$PWD:/src" --workdir /src \
-            fedora:latest bash -s >"$log" 2>&1 <<'FEDORA_EOF'
+            ${{ matrix.container }} bash -s >"$log" 2>&1 <<'FEDORA_EOF'
           set -euo pipefail
 
-          echo "OS:     $(grep PRETTY_NAME /etc/os-release)"
-          echo "bash:   $(bash --version | head -1)"
-          echo "dnf:    $(dnf --version | head -1)"
+          release="$(rpm -E %fedora)"
+          echo "OS:      $(grep PRETTY_NAME /etc/os-release)"
+          echo "release: ${release}"
+          echo "bash:    $(bash --version | head -1)"
+          echo "dnf:     $(dnf --version | head -1)"
 
           # dnf5 exits non-zero when there is nothing to do (packages already
           # present), so its exit status is not a reliable signal here. Install,
           # tolerate that, then verify the prerequisites are actually there.
-          dnf install -y --setopt=install_weak_deps=False findutils gawk ||
+          dnf install -y --setopt=install_weak_deps=False findutils gawk curl ||
             echo "dnf returned non-zero; verifying packages instead of trusting it"
-          for pkg in findutils gawk; do
+          for pkg in findutils gawk curl; do
             rpm -q "$pkg" >/dev/null 2>&1 || {
               echo "prerequisite missing: $pkg" >&2
               exit 1
@@ -113,6 +120,48 @@ jobs:
           echo '=== CLI smoke tests ==='
           ./install.sh --version
           ./install.sh --help >/dev/null
+
+          # Every package Tophat installs from Fedora's own repositories must
+          # still resolve on this release. COPR-provided packages are excluded:
+          # they are checked separately below, by chroot.
+          echo "=== Package resolution on Fedora ${release} ==="
+          {
+            cat packages/base-utils.packages \
+              packages/desktop-support.packages \
+              packages/intel-wifi.packages
+            grep -vE '^(matugen|dgop|dsearch)[[:space:]]*$' packages/dms-companions.packages
+          } | sed 's/#.*//' | sed '/^[[:space:]]*$/d' | sed 's/[[:space:]]*$//' | sort -u >/tmp/pkgs.txt
+          mapfile -t pkgs < /tmp/pkgs.txt
+          missing=()
+          for pkg in "${pkgs[@]}"; do
+            # repoquery resolves provides too, so a name that moved packages
+            # (e.g. wget -> wget1-wget/wget2-wget) still counts as available.
+            if ! dnf -q repoquery --available "$pkg" 2>/dev/null | grep -q .; then
+              missing+=("$pkg")
+            fi
+          done
+          if ((${#missing[@]})); then
+            echo "NOT RESOLVABLE on Fedora ${release}: ${missing[*]}" >&2
+            exit 1
+          fi
+          echo "all ${#pkgs[@]} Fedora-repo packages resolve on Fedora ${release}"
+
+          # The installer depends on repositories that are maintained outside
+          # Fedora: if they have no tree for this release, the install fails on
+          # day one however good our own code is.
+          echo "=== Upstream repositories for Fedora ${release} ==="
+          check_url() {
+            local code
+            code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 30 "$1" || echo 000)"
+            printf '%-100s %s\n' "$1" "$code"
+            [[ "$code" == 200 ]]
+          }
+          check_url "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-${release}.noarch.rpm"
+          check_url "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-${release}.noarch.rpm"
+          for project in yalter/niri avengemedia/dms avengemedia/danklinux scottames/ghostty; do
+            check_url "https://download.copr.fedorainfracloud.org/results/${project}/fedora-${release}-x86_64/repodata/repomd.xml"
+          done
+          echo "upstream repositories OK for Fedora ${release}"
           FEDORA_EOF
           then
             cat "$log"
@@ -127,5 +176,5 @@ jobs:
             line="${line//'%'/%25}"
             printf '%s%%0A' "$line"
           done)"
-          echo "::error::Fedora gate failed:%0A${msg}"
+          echo "::error::Fedora gate failed (${{ matrix.container }}):%0A${msg}"
           exit 1
