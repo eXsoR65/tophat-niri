@@ -1,0 +1,96 @@
+name: Integration
+
+# Deliberately dispatched only. A real install pulls the whole desktop stack
+# (several GB, 10-20 minutes), which is the wrong cost for every push. Run it
+# by hand after changes that touch package handling, services, or markers; add
+# a schedule once it has a stable history.
+on:
+  workflow_dispatch:
+    inputs:
+      container:
+        description: Fedora image to install into
+        required: true
+        default: fedora:45
+        type: choice
+        options:
+          - fedora:45
+          - fedora:latest
+          - fedora:rawhide
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: real install on ${{ inputs.container }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The container gets its own copy of the image; the runner's disk is the
+      # constraint, not CPU. Reclaim what the base image ships and unused.
+      - name: Reclaim disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          df -h /
+
+      - name: Start a systemd container
+        run: |
+          docker run -d --name tophat-it \
+            --privileged --cgroupns=host \
+            --hostname tophat-it \
+            --tmpfs /run --tmpfs /run/lock \
+            --volume /sys/fs/cgroup:/sys/fs/cgroup:rw \
+            ${{ inputs.container }} /sbin/init
+
+          for attempt in $(seq 1 60); do
+            state="$(docker exec tophat-it systemctl is-system-running 2>/dev/null || true)"
+            case "$state" in
+              running | degraded) echo "systemd is ${state}"; exit 0 ;;
+            esac
+            sleep 2
+          done
+
+          echo 'systemd did not start; container log follows'
+          docker logs tophat-it || true
+          exit 1
+
+      - name: Copy the repository in
+        run: |
+          docker cp "$PWD/." tophat-it:/src
+          docker exec --workdir /src tophat-it bash -c 'ls -la | head; cat VERSION'
+
+      - name: Real install and verification
+        run: |
+          set -uo pipefail
+          log="$(mktemp)"
+
+          if docker exec --workdir /src tophat-it \
+            env TARGET_USER=tophat-it \
+            bash /src/tests/integration/container-install.sh >"$log" 2>&1; then
+            grep -E '^===|PASS|^Tophat' "$log" || tail -20 "$log"
+            exit 0
+          fi
+
+          echo '--- integration log (tail) ---'
+          tail -60 "$log"
+          echo '--- installer log (tail) ---'
+          docker exec tophat-it tail -60 /var/log/tophat/latest.log 2>/dev/null || true
+          echo '--- state directory ---'
+          docker exec tophat-it ls -la /var/lib/tophat 2>/dev/null || true
+          echo '--- journal (tail) ---'
+          docker exec tophat-it journalctl -n 40 --no-pager 2>/dev/null || true
+
+          msg="$(tail -15 "$log" | while IFS= read -r line; do
+            line="${line//'%'/%25}"
+            printf '%s%%0A' "$line"
+          done)"
+          echo "::error::integration install failed (${{ inputs.container }}):%0A${msg}"
+          exit 1
+
+      - name: Remove the container
+        if: always()
+        run: docker rm -f tophat-it || true
