@@ -75,16 +75,36 @@ jobs:
 
       # The annotated tag body is the release body: it is written once, at tag
       # time, next to the code it describes.
+      - name: Collect release notes from the annotated tag
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          # actions/checkout can leave a *lightweight* tag pointing at the
+          # commit, whose %(contents) is just the commit message. Force-fetch
+          # the real tag object so the annotation is what ends up published.
+          git fetch --force origin "+refs/tags/${tag}:refs/tags/${tag}"
+          git for-each-ref "refs/tags/${tag}" --format='%(contents)' > release-notes.md
+
+          if [[ "$(git cat-file -t "$tag")" != "tag" ]]; then
+            echo "::error::${tag} is not an annotated tag; release notes cannot be derived"
+            exit 1
+          fi
+          if ! grep -q . release-notes.md; then
+            echo "::error::${tag} has an empty annotation"
+            exit 1
+          fi
+          echo '--- release notes (first 3 lines) ---'
+          head -3 release-notes.md
+
       - name: Create or update release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF_NAME}"
           archive="tophat-${tag}.tar.gz"
-          git tag -l --format='%(contents)' "$tag" > release-notes.md
 
           if gh release view "$tag" >/dev/null 2>&1; then
-            echo "Release $tag already exists; refreshing assets only"
+            echo "Release $tag already exists; refreshing notes and assets"
+            gh release edit "$tag" --notes-file release-notes.md
             gh release upload "$tag" "$archive" SHA256SUMS --clobber
           else
             gh release create "$tag" \
