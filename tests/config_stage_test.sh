@@ -6,8 +6,9 @@
 #  a graphical session and only ever hung or failed from a root context):
 #  a stub dms acts as a tripwire, and the post-login guidance must be logged.
 #
-#  getent is stubbed through PATH so TARGET_USER_HOME points at a temp
-#  directory instead of the real $HOME.
+#  getent, id and chown are stubbed through PATH, and the target user is a
+#  fixed fake account, so the outcome does not depend on who runs the test —
+#  root inside a CI container has no non-root account to resolve to.
 # =============================================================================
 set -euo pipefail
 
@@ -20,8 +21,14 @@ export SETUP_STATE_DIR="$tmp_dir/state"
 export DRY_RUN=false VERBOSE=false FORCE=false ACCEPT_PACKAGE_REMOVALS=false
 export CLR_RED='' CLR_GREEN='' CLR_YELLOW='' CLR_BLUE='' CLR_BOLD='' CLR_RESET=''
 export SETUP_ROOT="$ROOT" SETUP_LIB="$ROOT/lib" SETUP_PACKAGES="$ROOT/packages"
-export TARGET_USER
-TARGET_USER="$(id -un)"
+
+# A fixed non-root target user, so the result does not depend on who runs the
+# suite. Root inside a CI container has no non-root account with a real home,
+# and resolve_target_user rightly refuses to guess in that case.
+TEST_USER="tophat-test-user"
+export TARGET_USER="$TEST_USER"
+export CHOWN_CALLS="$tmp_dir/chown-calls"
+REAL_ID="$(command -v id)"
 export SRC_FILE="$ROOT/lib/config/user_services.sh"
 mkdir -p "$SETUP_STATE_DIR"
 touch "$SETUP_LOG"
@@ -37,10 +44,28 @@ mkdir -p "$STUB_HOME"
 cat >"$stub_dir/getent" <<'STUB'
 #!/bin/bash
 if [[ "$1" == "passwd" ]]; then
-  echo "$2:x:$(id -u "$2"):$(id -g "$2")::${STUB_HOME:-/tmp}:/bin/bash"
+  echo "$2:x:1000:1000::${STUB_HOME:-/tmp}:/bin/bash"
   exit 0
 fi
 exit 2
+STUB
+
+# id: the fake target user must "exist" for resolve_target_user; anything else
+# is delegated to the real id so unrelated lookups keep working.
+cat >"$stub_dir/id" <<STUB
+#!/bin/bash
+if [[ "\${1:-}" == "$TEST_USER" ]]; then
+  exit 0
+fi
+exec "$REAL_ID" "\$@"
+STUB
+
+# chown: root-only side effect. Record the call and assert on it below instead
+# of requiring the test process to be root or to own a real account.
+cat >"$stub_dir/chown" <<'STUB'
+#!/bin/bash
+printf '%s\n' "$*" >>"$CHOWN_CALLS"
+exit 0
 STUB
 
 # dms: tripwire — the config stage must never invoke dms
@@ -65,7 +90,8 @@ mkdir -p \
   "$HOME/Videos"
 STUB
 
-chmod +x "$stub_dir/getent" "$stub_dir/dms" "$stub_dir/xdg-user-dirs-update"
+chmod +x "$stub_dir/getent" "$stub_dir/id" "$stub_dir/chown" \
+  "$stub_dir/dms" "$stub_dir/xdg-user-dirs-update"
 export PATH="$stub_dir:$PATH"
 
 # shellcheck source=lib/helpers/run_logged.sh
@@ -115,6 +141,10 @@ done
 [[ -d "$STUB_HOME/.config/environment.d" ]] ||
   fail "environment.d not created in target home"
 [[ ! -e "$HOME/.config/niri" ]] || fail "test polluted real HOME"
+
+# Ownership goes to the resolved target user, not to whoever ran the test
+grep -qF "${TEST_USER}:${TEST_USER}" "$CHOWN_CALLS" ||
+  fail "config dirs were not chowned to the target user"
 
 # --- Missing dms.service warns instead of failing -----------------------------
 grep -q "Could not find dms.service" "$SETUP_LOG" ||
