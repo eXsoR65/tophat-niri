@@ -173,8 +173,9 @@ Fedora 45 was still pre-GA when this was checked (no `releases/45` tree on the
 mirrors yet; only `development/45`), so everything below is verified against the
 branched tree and a real `fedora:45` container, not a released Fedora.
 
-- [x] **8.1** Code runs on Fedora 45: all 11 tests, the kickstart validator and
-      the `--version`/`--help` smoke tests pass inside `fedora:45`.
+- [x] **8.1** Code runs on Fedora 45: the whole test suite (15 files at the
+      time of writing), the kickstart validator and the `--version`/`--help`
+      smoke tests pass inside `fedora:45`.
 - [x] **8.2** Every package Tophat installs from Fedora's own repositories
       resolves on F45 (48 packages). `wget` was the only casualty — the package
       name is gone in 44 and 45, so it is no longer installed.
@@ -187,8 +188,8 @@ branched tree and a real `fedora:45` container, not a released Fedora.
 - [ ] **8.5** Re-run the Fedora job once F45 is actually GA: RPM Fusion swaps
       its release RPMs from `development/45` to `releases/45` at GA, and that
       path is the one real installs will use.
-- [ ] **8.6** Live validation of v2.5 (and F45) on the laptop, since v2.5
-      changes installer behaviour.
+- [ ] **8.6** Live validation of v2.5–v2.7 (and F45) on the laptop; all three
+      change installer behaviour.
 
 ## Phase 9 — Installation safety (review Phase A)
 
@@ -212,9 +213,9 @@ not new features.
       job; the verify job runs with `contents: read`.
 - [x] **9.6** README release example derives the tag from `VERSION`, so it can no
       longer go stale (it said v2.4 while the source said 2.5).
-- [ ] **9.7** *Needs repository admin, not code:* protect `main` — require the
-      `shell` and `fedora` checks, block force-pushes, require a PR for changes.
-      Both branches report `protected: false` today.
+- [x] **9.7** Protect `main` — require the `shell` and `fedora` checks, block
+      force-pushes, require a PR for changes. Done on 2026-10-28: `main` reports
+      `protected: true`; `dev` is intentionally unprotected.
 - [ ] **9.8** Pin workflow actions to reviewed commit SHAs once Dependabot is
       keeping them current.
 
@@ -223,8 +224,13 @@ not new features.
 - [x] **10.1** Configuration-aware markers: each marker stores version, target
       user and a snapshot of the package lists; any change re-runs that stage
       with a logged reason (`tests/marker_invalidation_test.sh`).
-- [x] **10.2** Concurrent runs: atomic `mkdir` lock with a pid file and stale
-      lock breaking; dry runs are exempt (`tests/locking_test.sh`).
+- [x] **10.2** Concurrent runs: one lock mechanism — an atomic `mkdir`
+      directory with a pid file — because two backends cannot exclude each
+      other. Deliberately never reclaimed automatically (reclaiming races with
+      acquiring); a stale directory is reported with the command to clear it.
+      Proven under real contention, not just sequential calls
+      (`tests/locking_test.sh`, `tests/lock_concurrency_test.sh`). Dry runs are
+      exempt.
 - [x] **10.3** Interruption and failure tests: a failed or interrupted stage
       never writes a marker, so a rerun resumes instead of skipping
       (`tests/failure_recovery_test.sh`).
@@ -244,6 +250,17 @@ not new features.
 - [ ] **10.8c** Run the VM scenarios in `docs/INTEGRATION-TESTING.md` (fresh
       install, rerun, interrupted run, upgrade) on a Fedora Minimal VM.
 - [ ] **10.9** Run the real-GPU checklist on the laptop (also covers 8.6).
+
+### From the Codex review rounds on PR #4 / #6
+
+- [x] **10.10** `proxmox-test.sh` refuses to stop or destroy a VM that existed
+      before the run (a caller-supplied VMID could otherwise delete a machine
+      and its volumes).
+- [x] **10.11** `remove-replaced.packages` is part of the marker snapshot, so a
+      changed removal list invalidates packaging instead of being ignored.
+- [x] **10.12** Exit cleanup is composed through `register_exit_handler`; a bare
+      `trap ... EXIT` elsewhere (Homebrew's had one) would silently drop the
+      lock's cleanup, and the test suite now fails if one reappears.
 
 ## Suggested commit order
 

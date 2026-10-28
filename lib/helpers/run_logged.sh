@@ -138,8 +138,8 @@ _tophat_config_snapshot() {
   fi
 
   for name in base-utils.packages desktop-support.packages dms-companions.packages \
-    intel-wifi.packages applications.packages flatpaks.packages homebrew.packages \
-    distrobox.enable; do
+    intel-wifi.packages remove-replaced.packages applications.packages \
+    flatpaks.packages homebrew.packages distrobox.enable; do
     file="$base/$name"
     printf '### %s\n' "$name"
     if [[ -r "$file" ]]; then
@@ -227,6 +227,29 @@ skip_stage() {
 }
 
 # -----------------------------------------------------------------------------
+# Composable exit handlers
+# -----------------------------------------------------------------------------
+# Anything that needs cleanup on exit must register here. Installing a bare
+# `trap ... EXIT` replaces every other handler: Homebrew's temp-file cleanup did
+# exactly that and silently dropped the lock's cleanup, leaving a stale lock
+# behind after a successful run.
+declare -a _EXIT_HANDLERS=()
+
+register_exit_handler() {
+  _EXIT_HANDLERS+=("$1")
+  trap '_run_exit_handlers' EXIT
+}
+
+_run_exit_handlers() {
+  local handler
+
+  ((${#_EXIT_HANDLERS[@]} > 0)) || return 0
+  for handler in "${_EXIT_HANDLERS[@]}"; do
+    "$handler" || true
+  done
+}
+
+# -----------------------------------------------------------------------------
 # Single-run lock
 # -----------------------------------------------------------------------------
 # mkdir is atomic and, unlike flock(1), always available on a Fedora Minimal
@@ -235,57 +258,43 @@ skip_stage() {
 acquire_run_lock() {
   local lock_dir="$SETUP_STATE_DIR/.lock.d"
   local pid_file="$lock_dir/pid"
-  local claim_dir="$SETUP_STATE_DIR/.lock.stale.$$"
-  local existing_pid="" attempt
 
   mkdir -p "$SETUP_STATE_DIR"
 
+  # Exactly one mechanism, on purpose. Two backends cannot exclude each other:
+  # a run that starts before util-linux is installed would hold the directory
+  # lock while a later run, now seeing flock, takes a different lock file.
+  # mkdir is atomic, needs nothing beyond the shell, and is available before any
+  # package is installed.
   if mkdir "$lock_dir" 2>/dev/null; then
     printf '%s\n' "$$" >"$pid_file"
     RUN_LOCK_DIR="$lock_dir"
-    trap 'release_run_lock' EXIT
+    register_exit_handler release_run_lock
     return 0
   fi
 
-  # The owner creates the directory before it can publish its pid, so a missing
-  # pid file is not evidence that the owner is gone. Give it a moment: without
-  # this, two installers starting at the same instant both acquire the lock.
-  for ((attempt = 0; attempt < 30; attempt++)); do
-    if [[ -r "$pid_file" ]]; then
-      existing_pid="$(<"$pid_file")"
-      # Defend against a hand-edited or truncated pid file.
-      existing_pid="${existing_pid//[[:space:]]/}"
-      [[ -n "$existing_pid" ]] && break
+  if [[ -r "$pid_file" ]]; then
+    local existing_pid
+    existing_pid="$(<"$pid_file")"
+    existing_pid="${existing_pid//[[:space:]]/}"
+    if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null; then
+      log_error "Another Tophat run is in progress (pid $existing_pid, lock: $lock_dir)"
+      log_error "Wait for it to finish."
+      return 1
     fi
-    sleep 0.1
-  done
-
-  if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null; then
-    log_error "Another Tophat run is in progress (pid $existing_pid, lock: $lock_dir)"
-    log_error "Wait for it to finish, or remove $lock_dir if you are sure it is dead."
-    return 1
   fi
 
-  # Reclaiming a stale lock must have exactly one winner: rename it away first,
-  # and only the process whose rename succeeds may create the replacement.
-  if ! mv -- "$lock_dir" "$claim_dir" 2>/dev/null; then
-    log_error "Another Tophat run is reclaiming a stale lock; retry in a moment"
-    return 1
-  fi
-  rm -rf -- "$claim_dir"
-
-  log_warn "Breaking stale Tophat lock (pid ${existing_pid:-unknown} is gone)"
-  mkdir "$lock_dir" 2>/dev/null || return 1
-  printf '%s\n' "$$" >"$pid_file"
-  RUN_LOCK_DIR="$lock_dir"
-  trap 'release_run_lock' EXIT
-  return 0
+  # Deliberately never reclaimed automatically: reclaiming races with acquiring.
+  log_error "A lock directory is in the way and its owner is not running: $lock_dir"
+  log_error "If no Tophat run is active, remove it and retry: rm -rf '$lock_dir'"
+  return 1
 }
 
 release_run_lock() {
   [[ -n "${RUN_LOCK_DIR:-}" ]] || return 0
   rm -rf -- "$RUN_LOCK_DIR"
   RUN_LOCK_DIR=""
+  return 0
 }
 
 # -----------------------------------------------------------------------------

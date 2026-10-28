@@ -2,8 +2,9 @@
 # =============================================================================
 #  locking_test.sh — one installer at a time
 #
-#  The lock is a directory with a pid file: held while a live run exists, broken
-#  when the recorded pid is gone, so a killed run cannot block the machine.
+#  A single mechanism, an atomic `mkdir` lock directory with a pid file. It is
+#  never reclaimed automatically: reclaiming races with acquiring, so a stale
+#  directory is reported with the command to remove it.
 # =============================================================================
 set -euo pipefail
 
@@ -32,50 +33,64 @@ acquire_run_lock || fail "could not acquire a free lock"
 [[ "$(<"$SETUP_STATE_DIR/.lock.d/pid")" == "$$" ]] || fail "lock does not hold our pid"
 
 # --- A second run is refused while the first is alive ------------------------
+: >"$SETUP_LOG"
 if (acquire_run_lock) >/dev/null 2>&1; then
   fail "second concurrent run acquired the lock"
 fi
+grep -q 'Another Tophat run is in progress' "$SETUP_LOG" || fail "in-progress message not logged"
 
 # --- Releasing lets the next run in ------------------------------------------
 release_run_lock
-[[ ! -e "$SETUP_STATE_DIR/.lock.d" ]] || fail "lock not removed on release"
+[[ ! -e "$SETUP_STATE_DIR/.lock.d" ]] || fail "lock left behind after release"
 acquire_run_lock || fail "could not re-acquire after release"
 release_run_lock
 
-# --- A lock whose owner is about to publish its pid is not stolen -----------
-# The owner creates the directory first and writes the pid a moment later; a
-# second run must wait for the pid rather than assume the owner is dead.
-mkdir -p "$SETUP_STATE_DIR/.lock.d"
-owner_pid=$$
-(sleep 0.5 && printf '%s\n' "$owner_pid" >"$SETUP_STATE_DIR/.lock.d/pid") &
-publisher=$!
-if (acquire_run_lock) >/dev/null 2>&1; then
-  fail 'stole a lock whose pid was published late'
-fi
-wait "$publisher" 2>/dev/null || true
-rm -rf "$SETUP_STATE_DIR/.lock.d"
+# --- A holder that exits without releasing does not wedge the machine --------
+# The directory is removed by the EXIT trap.
+(acquire_run_lock) || fail "subshell could not acquire the lock"
+acquire_run_lock || fail "lock leaked after the holder exited"
+release_run_lock
 
-# --- A lock directory with no pid at all is reclaimed after a grace period ---
-mkdir -p "$SETUP_STATE_DIR/.lock.d"
-if ! (acquire_run_lock); then
-  fail 'a lock with no pid was never reclaimed'
-fi
-rm -rf "$SETUP_STATE_DIR/.lock.d"
+# --- Registering another exit handler must not displace the lock's cleanup --
+# Homebrew used to install its own EXIT trap, which replaced the lock's and left
+# a stale directory behind after a successful run.
+marker="$tmp_dir/other-handler-ran"
+_other_handler() { : >"$marker"; }
 
-# --- A stale lock (dead pid) is broken, not obeyed ---------------------------
+(
+  acquire_run_lock || exit 1
+  register_exit_handler _other_handler
+) || fail "subshell with two handlers failed"
+[[ ! -e "$SETUP_STATE_DIR/.lock.d" ]] || fail "lock survived the exit with two handlers registered"
+[[ -f "$marker" ]] || fail "the second exit handler did not run"
+
+# --- A stale lock is reported, never reclaimed automatically ----------------
 mkdir -p "$SETUP_STATE_DIR/.lock.d"
 printf '%s\n' 999999 >"$SETUP_STATE_DIR/.lock.d/pid"
 : >"$SETUP_LOG"
-acquire_run_lock || fail "stale lock blocked a new run"
-grep -q "Breaking stale Tophat lock" "$SETUP_LOG" || fail "stale lock break not logged"
-[[ "$(<"$SETUP_STATE_DIR/.lock.d/pid")" == "$$" ]] || fail "stale lock not replaced"
-release_run_lock
+if acquire_run_lock 2>/dev/null; then
+  fail "stale lock was reclaimed automatically"
+fi
+grep -q 'remove it and retry' "$SETUP_LOG" || fail "no manual-cleanup guidance logged"
+[[ -d "$SETUP_STATE_DIR/.lock.d" ]] || fail "stale lock directory was removed"
 
-# --- A lock with no pid file at all is also treated as stale -----------------
+# --- ...including when the pid was never written ---------------------------
+rm -rf "$SETUP_STATE_DIR/.lock.d"
 mkdir -p "$SETUP_STATE_DIR/.lock.d"
-acquire_run_lock || fail "lock without a pid file blocked a new run"
-release_run_lock
+: >"$SETUP_LOG"
+if acquire_run_lock 2>/dev/null; then
+  fail "a lock directory without a pid was reclaimed automatically"
+fi
+grep -q 'remove it and retry' "$SETUP_LOG" || fail "no manual-cleanup guidance logged"
 
-[[ ! -e "$SETUP_STATE_DIR/.lock.d" ]] || fail "lock left behind after release"
+rm -rf "$SETUP_STATE_DIR/.lock.d"
+[[ ! -e "$SETUP_STATE_DIR/.lock.d" ]] || fail "lock artifacts left behind"
+
+# --- Nothing may install a bare EXIT trap -----------------------------------
+# A `trap ... EXIT` anywhere else would replace the registry's dispatcher and
+# silently drop the lock cleanup (as Homebrew's did).
+offenders="$(grep -rn --include='*.sh' 'trap .*EXIT' "$ROOT/lib" 2>/dev/null |
+  grep -v 'helpers/run_logged.sh' || true)"
+[[ -z "$offenders" ]] || fail "bare EXIT trap found (use register_exit_handler): ${offenders}"
 
 echo "locking_test.sh: PASS"

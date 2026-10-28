@@ -70,6 +70,14 @@ EOF
   fi
 }
 
+_HOMEBREW_TMP=""
+
+_cleanup_homebrew_tmp() {
+  [[ -n "${_HOMEBREW_TMP:-}" ]] || return 0
+  rm -f -- "$_HOMEBREW_TMP"
+  _HOMEBREW_TMP=""
+}
+
 find_working_brew() {
   local candidate="$HOMEBREW_PREFIX/bin/brew"
   if [[ -x "$candidate" ]] && target_user_command "$candidate" --version &>/dev/null; then
@@ -109,20 +117,18 @@ install_homebrew_for_target() {
     return 1
   fi
 
-  local installer_tmp
-  installer_tmp="$(mktemp /tmp/tophat-homebrew.XXXXXX)"
-  chmod 0644 "$installer_tmp"
-  trap 'rm -f -- "${installer_tmp:-}"' EXIT
+  _HOMEBREW_TMP="$(mktemp /tmp/tophat-homebrew.XXXXXX)"
+  chmod 0644 "$_HOMEBREW_TMP"
+  register_exit_handler _cleanup_homebrew_tmp
 
   run_logged "Downloading the official Homebrew installer from $HOMEBREW_INSTALL_URL" \
     curl --fail --show-error --location --proto '=https' --tlsv1.2 \
-    --output "$installer_tmp" "$HOMEBREW_INSTALL_URL"
+    --output "$_HOMEBREW_TMP" "$HOMEBREW_INSTALL_URL"
 
   run_as_target_user "Installing Homebrew for Linux as $TARGET_USER" \
-    env NONINTERACTIVE=1 CI=1 /bin/bash "$installer_tmp"
+    env NONINTERACTIVE=1 CI=1 /bin/bash "$_HOMEBREW_TMP"
 
-  rm -f -- "$installer_tmp"
-  trap - EXIT
+  _cleanup_homebrew_tmp
 }
 
 if [[ ! -e "$HOMEBREW_LIST" ]]; then

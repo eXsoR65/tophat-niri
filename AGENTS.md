@@ -14,9 +14,11 @@ first; the README covers user-facing usage.
 - **Validation:** v2.3 validated (2026-10-27) on the physical laptop with a
   real GPU — the accelerated-graphics path the retired Proxmox VM (llvmpipe,
   software rendering only) could never exercise. Last validated release: v2.3.
-  v2.4 was process-only (no installer change). **v2.5 changes installer
-  behaviour** — distro guard, greeter config backup, narrower `chown` — so it
-  needs a live run before it counts as validated.
+  v2.4 was process-only (no installer change). **v2.5–v2.7 change installer
+  behaviour** — distro guard, greeter config backup, narrower `chown` (2.5);
+  opt-in autoremove, stricter `--select`, non-bypassable finalize guard (2.6);
+  configuration-aware markers, single-run lock, composable exit cleanup (2.7) —
+  so the current code needs a live run before it counts as validated.
 - **Upstream dependencies:** Fedora (dnf5), COPRs `yalter/niri`,
   `avengemedia/dms` (auto-pulls `avengemedia/danklinux`), `scottames/ghostty`,
   RPM Fusion free/nonfree, official Brave repo, greetd.
@@ -120,12 +122,23 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
 8. **Logs/state**: live runs write `/var/log/tophat/runs/<timestamp>.log`
    (0640) with `latest.log` symlink, and state under `/var/lib/tophat/`.
 9. **One run at a time**: `acquire_run_lock` takes `$SETUP_STATE_DIR/.lock.d`
-   via atomic `mkdir` (not `flock`, which is not guaranteed on a Minimal
-   install) and records its pid, so a killed run's lock is recognised as stale
-   and broken instead of blocking forever. Because the directory exists for a
-   moment before the pid is written, a missing pid file is not treated as proof
-   of death: contenders wait up to 3 s for it. Reclaiming a stale lock renames
-   it away first, so exactly one contender can win. Dry runs take no lock.
+   with an atomic `mkdir` and records its pid. Exactly one mechanism, on
+   purpose: two backends cannot exclude each other — a run that starts before
+   util-linux is installed would hold a directory lock while a later run, now
+   seeing `flock`, takes a different lock file, and both proceed. `mkdir` is
+   atomic, needs nothing beyond the shell, and exists before any package is
+   installed.
+   The lock is never reclaimed automatically, because reclaiming races with
+   acquiring; a stale directory is reported with the exact command to remove it
+   (`rm -rf .lock.d`). Dry runs take no lock.
+
+10. **Exit cleanup is registered, never trapped**: anything needing cleanup uses
+    `register_exit_handler <function>` (`lib/helpers/run_logged.sh`), which
+    composes handlers behind one EXIT trap. A bare `trap ... EXIT` replaces the
+    dispatcher and silently drops every other handler — Homebrew's temp-file
+    cleanup did that and left the lock behind after a successful install.
+    `locking_test.sh` fails if a bare EXIT trap reappears outside
+    `run_logged.sh`.
 
 ## Known quirks / rough edges
 
@@ -160,10 +173,11 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
 - **TUI** (OpenTUI + `@opentui/react`, Bun): plan lives in
   `docs/TUI-PLAN.md`. In-repo `tui/`, `./tophat` launcher with Bash fallback,
   milestones M1–M5. Not yet implemented — Bash remains the only engine.
-- **v2.4 hardening** and the **v2.5 review fixes** are done: every stage now
-  has at least one test, and the review findings are closed or explicitly
-  deferred. What remains (the dotfiles decision, community files, the `dev`
-  branch question) is tracked in `docs/TODO.md` under Phase 6.
+- **v2.4–v2.7 hardening** is done: every stage has at least one test and the
+  review findings are closed or explicitly deferred. What remains — the dotfiles
+  decision, community files, the `dev` branch question (Phase 6), the Fedora 45
+  GA re-check (8.5), live hardware validation (8.6/10.9) — is tracked in
+  `docs/TODO.md`.
 
 ## Validation & CI
 
@@ -175,10 +189,12 @@ find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n && bash -n install.sh
 shellcheck -s bash -x -e SC1090,SC1091 install.sh $(find lib tests kickstart -name '*.sh' | sort)
 shfmt -d -i 2 -ci install.sh lib tests kickstart   # 2-space indent, case-indent
 kickstart/validate-kickstart.sh                    # rejects unsafe ks defaults
-for t in tests/*_test.sh; do "$t"; done             # 11 files: helpers, pkg, arg_parse,
-                                                     # stage_resolution, finalize_guard, and
-                                                     # one per stage (config, preflight, repos,
-                                                     # packaging, services, extras)
+for t in tests/*_test.sh; do "$t"; done             # 15 files: helpers, pkg, arg_parse,
+                                                     # stage_resolution, finalize_guard, locking,
+                                                     # lock_concurrency, marker_invalidation,
+                                                     # failure_recovery, and one per stage
+                                                     # (config, preflight, repos, packaging,
+                                                     # services, extras)
 ```
 
 The `shell` job also asserts that `VERSION` matches the version in the
@@ -214,6 +230,11 @@ mismatch, then publishes a source archive + `SHA256SUMS` and opens the release
 with the tag annotation as its body. The archive is reproducible: `git archive`
 to tar, `gzip -n`, and the workflow rebuilds it once to compare digests. Never
 create releases by hand.
+
+Run `tests/verify_all.sh` before pushing: it runs all five gates, the whole
+suite, and the lock concurrency stress (the races the lock guards against only
+appear when processes interleave, which a sequential suite cannot produce).
+`FAST=1` skips the stress rounds while iterating.
 
 **Run all five before considering a change done.** Style: shfmt `-i 2 -ci`,
 ShellCheck-clean (SC1090/SC1091 exempt for dynamic sourcing), shellcheck
