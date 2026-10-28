@@ -119,13 +119,16 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
    skipped, with a message telling the user to run it themselves.
 8. **Logs/state**: live runs write `/var/log/tophat/runs/<timestamp>.log`
    (0640) with `latest.log` symlink, and state under `/var/lib/tophat/`.
-9. **One run at a time**: `acquire_run_lock` takes `$SETUP_STATE_DIR/.lock.d`
-   via atomic `mkdir` (not `flock`, which is not guaranteed on a Minimal
-   install) and records its pid, so a killed run's lock is recognised as stale
-   and broken instead of blocking forever. Because the directory exists for a
-   moment before the pid is written, a missing pid file is not treated as proof
-   of death: contenders wait up to 3 s for it. Reclaiming a stale lock renames
-   it away first, so exactly one contender can win. Dry runs take no lock.
+9. **One run at a time**: `acquire_run_lock` uses `flock` on
+   `$SETUP_STATE_DIR/.lock` (util-linux; systemd itself depends on it). The
+   kernel releases it when the holder exits, so there is no stale lock to
+   reclaim — and therefore no reclaim-versus-acquire race, which a
+   mkdir-plus-pid scheme cannot avoid without more machinery.
+   Where `flock` is genuinely absent it falls back to a directory lock
+   (`$SETUP_STATE_DIR/.lock.d` + pid) that is **never reclaimed automatically**:
+   a stale directory is reported with the path to remove. `TOPHAT_LOCK_BACKEND`
+   (`auto`/`flock`/`directory`) forces a backend so the fallback stays tested on
+   machines that have flock. Dry runs take no lock.
 
 ## Known quirks / rough edges
 

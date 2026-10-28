@@ -138,8 +138,8 @@ _tophat_config_snapshot() {
   fi
 
   for name in base-utils.packages desktop-support.packages dms-companions.packages \
-    intel-wifi.packages applications.packages flatpaks.packages homebrew.packages \
-    distrobox.enable; do
+    intel-wifi.packages remove-replaced.packages applications.packages \
+    flatpaks.packages homebrew.packages distrobox.enable; do
     file="$base/$name"
     printf '### %s\n' "$name"
     if [[ -r "$file" ]]; then
@@ -233,12 +233,52 @@ skip_stage() {
 # install. The pid file lets a lock left behind by a killed run be recognised as
 # stale instead of blocking the machine forever.
 acquire_run_lock() {
+  mkdir -p "$SETUP_STATE_DIR"
+
+  # The backend is auto-detected, but can be forced with TOPHAT_LOCK_BACKEND so
+  # the fallback stays testable on machines that do have flock.
+  local backend="${TOPHAT_LOCK_BACKEND:-auto}"
+
+  if [[ "$backend" == auto ]]; then
+    if command -v flock >/dev/null 2>&1; then
+      backend=flock
+    else
+      backend=directory
+    fi
+  fi
+
+  # flock is kernel-managed: the lock is released when the holder exits, so there
+  # is no stale lock to reclaim and no race between reclaiming and acquiring.
+  # util-linux provides it on Fedora (and it is what systemd itself depends on).
+  if [[ "$backend" == flock ]]; then
+    if ! command -v flock >/dev/null 2>&1; then
+      log_error "TOPHAT_LOCK_BACKEND=flock was requested but flock is not installed"
+      return 1
+    fi
+    RUN_LOCK_FILE="$SETUP_STATE_DIR/.lock"
+    exec 9>"$RUN_LOCK_FILE" || return 1
+    if flock -n 9; then
+      trap 'release_run_lock' EXIT
+      return 0
+    fi
+    exec 9>&-
+    RUN_LOCK_FILE=""
+    log_error "Another Tophat run is in progress (lock: $SETUP_STATE_DIR/.lock)"
+    log_error "Wait for it to finish; the lock is released automatically when it exits."
+    return 1
+  fi
+
+  # Fallback for systems without flock: a directory lock that is never reclaimed
+  # automatically. Auto-reclaiming invites the very race this guard exists to
+  # prevent, so a stale directory is reported for a human to remove instead.
+  if [[ "$backend" != directory ]]; then
+    log_warn "flock is unavailable; using a directory lock that needs manual cleanup if a run is killed"
+  else
+    log_warn "directory lock backend selected; it needs manual cleanup if a run is killed"
+  fi
   local lock_dir="$SETUP_STATE_DIR/.lock.d"
   local pid_file="$lock_dir/pid"
-  local claim_dir="$SETUP_STATE_DIR/.lock.stale.$$"
-  local existing_pid="" attempt
-
-  mkdir -p "$SETUP_STATE_DIR"
+  local existing_pid=""
 
   if mkdir "$lock_dir" 2>/dev/null; then
     printf '%s\n' "$$" >"$pid_file"
@@ -247,45 +287,32 @@ acquire_run_lock() {
     return 0
   fi
 
-  # The owner creates the directory before it can publish its pid, so a missing
-  # pid file is not evidence that the owner is gone. Give it a moment: without
-  # this, two installers starting at the same instant both acquire the lock.
-  for ((attempt = 0; attempt < 30; attempt++)); do
-    if [[ -r "$pid_file" ]]; then
-      existing_pid="$(<"$pid_file")"
-      # Defend against a hand-edited or truncated pid file.
-      existing_pid="${existing_pid//[[:space:]]/}"
-      [[ -n "$existing_pid" ]] && break
-    fi
-    sleep 0.1
-  done
+  if [[ -r "$pid_file" ]]; then
+    existing_pid="$(<"$pid_file")"
+    existing_pid="${existing_pid//[[:space:]]/}"
+  fi
 
   if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null; then
     log_error "Another Tophat run is in progress (pid $existing_pid, lock: $lock_dir)"
-    log_error "Wait for it to finish, or remove $lock_dir if you are sure it is dead."
-    return 1
+  else
+    log_error "A stale lock directory is in the way: $lock_dir (pid ${existing_pid:-unknown} is not running)"
+    log_error "Remove it and retry: rmdir '$lock_dir' after deleting '$pid_file' if present."
   fi
-
-  # Reclaiming a stale lock must have exactly one winner: rename it away first,
-  # and only the process whose rename succeeds may create the replacement.
-  if ! mv -- "$lock_dir" "$claim_dir" 2>/dev/null; then
-    log_error "Another Tophat run is reclaiming a stale lock; retry in a moment"
-    return 1
-  fi
-  rm -rf -- "$claim_dir"
-
-  log_warn "Breaking stale Tophat lock (pid ${existing_pid:-unknown} is gone)"
-  mkdir "$lock_dir" 2>/dev/null || return 1
-  printf '%s\n' "$$" >"$pid_file"
-  RUN_LOCK_DIR="$lock_dir"
-  trap 'release_run_lock' EXIT
-  return 0
+  return 1
 }
 
 release_run_lock() {
-  [[ -n "${RUN_LOCK_DIR:-}" ]] || return 0
-  rm -rf -- "$RUN_LOCK_DIR"
-  RUN_LOCK_DIR=""
+  if [[ -n "${RUN_LOCK_FILE:-}" ]]; then
+    flock -u 9 2>/dev/null || true
+    exec 9>&-
+    rm -f -- "$RUN_LOCK_FILE"
+    RUN_LOCK_FILE=""
+  fi
+  if [[ -n "${RUN_LOCK_DIR:-}" ]]; then
+    rm -rf -- "$RUN_LOCK_DIR"
+    RUN_LOCK_DIR=""
+  fi
+  return 0
 }
 
 # -----------------------------------------------------------------------------

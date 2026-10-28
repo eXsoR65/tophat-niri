@@ -75,6 +75,15 @@ grep -q "Package selection changed" "$SETUP_LOG" || fail "package invalidation n
 stage_marker_write packaging
 skip_yes packaging || fail "marker not honoured after re-recording"
 
+# --- Changing the replacement-removal list invalidates it too ---------------
+# lib/packaging/remove_replaced.sh consumes this list, so a marker that ignores
+# it would silently skip newly selected removals.
+: >"$SETUP_LOG"
+stage_marker_write packaging
+printf '\nfirefox\n' >>"$SETUP_PACKAGES/remove-replaced.packages"
+skip_no packaging || fail "changed removal list did not invalidate the marker"
+grep -q 'Package selection changed' "$SETUP_LOG" || fail "removal-list change not explained"
+
 # --- A marker without a recorded configuration is not trusted ---------------
 rm -f "$SETUP_STATE_DIR/stage-packaging.config"
 : >"$SETUP_LOG"

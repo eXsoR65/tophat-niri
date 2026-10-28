@@ -2,8 +2,12 @@
 # =============================================================================
 #  locking_test.sh — one installer at a time
 #
-#  The lock is a directory with a pid file: held while a live run exists, broken
-#  when the recorded pid is gone, so a killed run cannot block the machine.
+#  Runs the same scenarios against both lock backends:
+#   - flock: kernel-managed, released when the holder exits, so there is no
+#     stale lock to reclaim and no reclaim race.
+#   - directory: the fallback when flock is absent. Deliberately never reclaimed
+#     automatically, because reclaiming races with acquisition; a stale
+#     directory is reported for a human instead.
 # =============================================================================
 set -euo pipefail
 
@@ -11,71 +15,80 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
-export SETUP_LOG="$tmp_dir/setup.log"
-export SETUP_STATE_DIR="$tmp_dir/state"
 export DRY_RUN=false VERBOSE=false FORCE=false
 export CLR_RED='' CLR_GREEN='' CLR_YELLOW='' CLR_BLUE='' CLR_BOLD='' CLR_RESET=''
-mkdir -p "$SETUP_STATE_DIR"
-touch "$SETUP_LOG"
 
 # shellcheck source=lib/helpers/run_logged.sh
 source "$ROOT/lib/helpers/run_logged.sh"
 
 fail() {
-  echo "FAIL: $1" >&2
+  echo "FAIL: ${1}" >&2
   exit 1
 }
 
-# --- A free lock is taken -----------------------------------------------------
-acquire_run_lock || fail "could not acquire a free lock"
-[[ -d "$SETUP_STATE_DIR/.lock.d" ]] || fail "lock directory not created"
-[[ "$(<"$SETUP_STATE_DIR/.lock.d/pid")" == "$$" ]] || fail "lock does not hold our pid"
+run_backend() { # $1 = flock | directory
+  local backend="$1"
+  local state="$tmp_dir/state-${backend}"
 
-# --- A second run is refused while the first is alive ------------------------
-if (acquire_run_lock) >/dev/null 2>&1; then
-  fail "second concurrent run acquired the lock"
+  (
+    export SETUP_STATE_DIR="$state"
+    export SETUP_LOG="$tmp_dir/log-${backend}"
+    export TOPHAT_LOCK_BACKEND="$backend"
+    mkdir -p "$SETUP_STATE_DIR"
+    : >"$SETUP_LOG"
+
+    # --- A free lock is taken -------------------------------------------------
+    acquire_run_lock || fail "${backend}: could not acquire a free lock"
+    if [[ "$backend" == flock ]]; then
+      [[ -f "$SETUP_STATE_DIR/.lock" ]] || fail "${backend}: lock file not created"
+    else
+      [[ -d "$SETUP_STATE_DIR/.lock.d" ]] || fail "${backend}: lock directory not created"
+      [[ "$(<"$SETUP_STATE_DIR/.lock.d/pid")" == "$$" ]] || fail "${backend}: pid not recorded"
+    fi
+
+    # --- A second run is refused while the first is alive --------------------
+    if (acquire_run_lock) >/dev/null 2>&1; then
+      fail "${backend}: second concurrent run acquired the lock"
+    fi
+
+    # --- Releasing lets the next run in --------------------------------------
+    release_run_lock
+    [[ ! -e "$SETUP_STATE_DIR/.lock" && ! -e "$SETUP_STATE_DIR/.lock.d" ]] ||
+      fail "${backend}: lock left behind after release"
+    acquire_run_lock || fail "${backend}: could not re-acquire after release"
+    release_run_lock
+
+    # --- A holder that dies without releasing does not wedge the machine -----
+    (acquire_run_lock) || fail "${backend}: subshell could not acquire"
+    if ! acquire_run_lock 2>/dev/null; then
+      fail "${backend}: lock leaked after the holder exited"
+    fi
+    release_run_lock
+
+    # --- Leftovers: ignored by flock, reported by the directory backend ------
+    mkdir -p "$SETUP_STATE_DIR/.lock.d"
+    printf '%s\n' 999999 >"$SETUP_STATE_DIR/.lock.d/pid"
+    if [[ "$backend" == flock ]]; then
+      acquire_run_lock || fail "${backend}: a leftover directory blocked the lock"
+      release_run_lock
+    else
+      if acquire_run_lock 2>/dev/null; then
+        fail "${backend}: stale lock directory was reclaimed automatically"
+      fi
+      grep -q 'stale lock directory' "$SETUP_LOG" ||
+        fail "${backend}: no manual-cleanup guidance logged"
+    fi
+
+    rm -rf "$SETUP_STATE_DIR/.lock.d"
+    [[ ! -e "$SETUP_STATE_DIR/.lock" ]] || fail "${backend}: lock file left behind"
+  )
+}
+
+if command -v flock >/dev/null 2>&1; then
+  run_backend flock || exit 1
+else
+  echo 'locking_test.sh: flock unavailable, skipping the flock backend'
 fi
-
-# --- Releasing lets the next run in ------------------------------------------
-release_run_lock
-[[ ! -e "$SETUP_STATE_DIR/.lock.d" ]] || fail "lock not removed on release"
-acquire_run_lock || fail "could not re-acquire after release"
-release_run_lock
-
-# --- A lock whose owner is about to publish its pid is not stolen -----------
-# The owner creates the directory first and writes the pid a moment later; a
-# second run must wait for the pid rather than assume the owner is dead.
-mkdir -p "$SETUP_STATE_DIR/.lock.d"
-owner_pid=$$
-(sleep 0.5 && printf '%s\n' "$owner_pid" >"$SETUP_STATE_DIR/.lock.d/pid") &
-publisher=$!
-if (acquire_run_lock) >/dev/null 2>&1; then
-  fail 'stole a lock whose pid was published late'
-fi
-wait "$publisher" 2>/dev/null || true
-rm -rf "$SETUP_STATE_DIR/.lock.d"
-
-# --- A lock directory with no pid at all is reclaimed after a grace period ---
-mkdir -p "$SETUP_STATE_DIR/.lock.d"
-if ! (acquire_run_lock); then
-  fail 'a lock with no pid was never reclaimed'
-fi
-rm -rf "$SETUP_STATE_DIR/.lock.d"
-
-# --- A stale lock (dead pid) is broken, not obeyed ---------------------------
-mkdir -p "$SETUP_STATE_DIR/.lock.d"
-printf '%s\n' 999999 >"$SETUP_STATE_DIR/.lock.d/pid"
-: >"$SETUP_LOG"
-acquire_run_lock || fail "stale lock blocked a new run"
-grep -q "Breaking stale Tophat lock" "$SETUP_LOG" || fail "stale lock break not logged"
-[[ "$(<"$SETUP_STATE_DIR/.lock.d/pid")" == "$$" ]] || fail "stale lock not replaced"
-release_run_lock
-
-# --- A lock with no pid file at all is also treated as stale -----------------
-mkdir -p "$SETUP_STATE_DIR/.lock.d"
-acquire_run_lock || fail "lock without a pid file blocked a new run"
-release_run_lock
-
-[[ ! -e "$SETUP_STATE_DIR/.lock.d" ]] || fail "lock left behind after release"
+run_backend directory || exit 1
 
 echo "locking_test.sh: PASS"
