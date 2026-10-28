@@ -100,7 +100,7 @@ pam_backups_after="$(find "$(dirname "$pam_file")" -name 'greetd.tophat-backup.*
 grep -q "already has all gnome-keyring hooks" "$SETUP_LOG" || fail "PAM idempotency not logged"
 
 # --- A completed stage is skipped --------------------------------------------
-date '+%Y-%m-%d %H:%M:%S' >"$SETUP_STATE_DIR/stage-services.done"
+stage_marker_write services
 : >"$SYSTEMCTL_CALLS"
 run_services_stage >/dev/null
 [[ ! -s "$SYSTEMCTL_CALLS" ]] || fail "marked stage still called systemctl"

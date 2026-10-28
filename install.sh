@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-#  Tophat v2.6 — Fedora niri workstation installer
+#  Tophat v2.7 — Fedora niri workstation installer
 #  Transforms a base Fedora installation into a fully configured workstation
 #  running niri + DankMaterialShell.
 # =============================================================================
@@ -119,6 +119,8 @@ on_error() {
 
   if declare -F log_error >/dev/null; then
     log_error "Tophat failed at line $line (exit code $rc)"
+    log_error "Stages that finished are recorded; re-run to resume from the failed one."
+    log_error "Use --force to re-run stages that had already completed."
   else
     echo "[ERROR] Tophat failed at line $line (exit code $rc)" >&2
   fi
@@ -154,6 +156,12 @@ main() {
   # shellcheck source=lib/helpers/all.sh
   source "$SETUP_LIB/helpers/all.sh"
   log_ok "Helpers loaded"
+
+  # One installer at a time: concurrent runs would fight over the same markers,
+  # logs and package-manager lock. Dry runs change nothing, so they may overlap.
+  if [[ "$DRY_RUN" != true ]]; then
+    acquire_run_lock || exit 1
+  fi
 
   # Run each selected stage
   for stage in "${STAGES[@]}"; do

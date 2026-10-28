@@ -86,7 +86,7 @@ fi
 grep -q "No applications.packages" "$SETUP_LOG" || fail "applications guidance not logged"
 
 # --- The stage marker short-circuits a re-run -------------------------------
-date '+%Y-%m-%d %H:%M:%S' >"$SETUP_STATE_DIR/stage-packaging.done"
+stage_marker_write packaging
 FORCE=false
 : >"$DNF_CALLS"
 run_packaging_stage >/dev/null

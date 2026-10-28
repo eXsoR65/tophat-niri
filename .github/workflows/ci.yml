@@ -121,6 +121,32 @@ jobs:
           ./install.sh --version
           ./install.sh --help >/dev/null
 
+          # Walk every stage for real (parsing, package lists, file handling,
+          # target-user resolution) without changing the container. This is the
+          # closest CI can get to an end-to-end install without a VM.
+          echo '=== Full dry-run install ==='
+          useradd -m -s /bin/bash tophat-dryrun
+          if ! ./install.sh --dry-run --target-user tophat-dryrun >/tmp/dryrun.log 2>&1; then
+            echo '--- dry run failed, last 40 lines ---'
+            tail -40 /tmp/dryrun.log
+            exit 1
+          fi
+          grep -q 'DRY RUN' /tmp/dryrun.log || {
+            echo 'dry run did not report DRY RUN mode' >&2
+            exit 1
+          }
+          for stage in preflight repos packaging config services extras finalize; do
+            grep -q "Starting stage: ${stage}" /tmp/dryrun.log || {
+              echo "dry run never reached stage: ${stage}" >&2
+              exit 1
+            }
+          done
+          grep -q 'Skipping automatic package removal' /tmp/dryrun.log || {
+            echo 'dry run did not exercise the autoremove consent path' >&2
+            exit 1
+          }
+          echo 'dry run reached all seven stages'
+
           # Every package Tophat installs from Fedora's own repositories must
           # still resolve on this release. COPR-provided packages are excluded
           # here and checked separately below, by chroot.

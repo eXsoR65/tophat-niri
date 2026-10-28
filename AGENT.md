@@ -5,7 +5,7 @@ first; the README covers user-facing usage.
 
 ## Project identity
 
-- **Name:** Tophat (version in `VERSION`, currently 2.6; last release: v2.4)
+- **Name:** Tophat (version in `VERSION`, currently 2.7; last release: v2.4)
 - **Purpose:** Opinionated installer that transforms a **Fedora Minimal**
   install into a **niri + DankMaterialShell (DMS)** workstation. Inspired by
   Omarchy's staged flow.
@@ -90,6 +90,13 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
    markers live at `$SETUP_STATE_DIR/stage-<stage>.done`. `skip_stage` marks a
    stage skipped *without* writing a marker (used by extras so later opt-in
    files are discovered). `--force` bypasses markers.
+
+   Markers record *what* was completed: `completed=`, `version=`, `user=`, plus
+   a verbatim snapshot of the package lists in `stage-<stage>.config`
+   (`_tophat_config_snapshot`). A marker is honoured only when the version, the
+   target user and the package selection all still match; otherwise the stage
+   re-runs with a logged reason. The snapshot is compared as text because
+   `sha256sum`/`cksum` are not guaranteed on Fedora Minimal.
 2. **Dry run**: `run_logged` prints the command and returns 0. File writes must
    be manually gated with `[[ "$DRY_RUN" != true ]]`. Dry-run logs go to
    `${TMPDIR:-/tmp}`, not `/var/log/tophat`.
@@ -112,6 +119,10 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
    skipped, with a message telling the user to run it themselves.
 8. **Logs/state**: live runs write `/var/log/tophat/runs/<timestamp>.log`
    (0640) with `latest.log` symlink, and state under `/var/lib/tophat/`.
+9. **One run at a time**: `acquire_run_lock` takes `$SETUP_STATE_DIR/.lock.d`
+   via atomic `mkdir` (not `flock`, which is not guaranteed on a Minimal
+   install) and records its pid, so a killed run's lock is recognised as stale
+   and broken instead of blocking forever. Dry runs do not take the lock.
 
 ## Known quirks / rough edges
 
@@ -170,6 +181,11 @@ for t in tests/*_test.sh; do "$t"; done             # 11 files: helpers, pkg, ar
 The `shell` job also asserts that `VERSION` matches the version in the
 `install.sh` header, which nothing else checks.
 
+Inside the Fedora containers the job additionally walks **all seven stages** as
+a `./install.sh --dry-run` against a throwaway user, which is the closest CI can
+get to a real install without a VM. `docs/INTEGRATION-TESTING.md` records what
+still needs a VM or a real GPU, and the manual procedure for both.
+
 Two jobs: `shell` on `ubuntu-latest` runs all five gates above. `fedora` runs
 inside a container matrix of `fedora:latest` (the current release) and
 `fedora:45` (the next one), covering only what genuinely needs Fedora — bash
@@ -192,7 +208,9 @@ at ~10 per step).
 Releases: push an annotated tag `v<version>` matching `VERSION`;
 `.github/workflows/release.yml` re-runs the gates, fails on a VERSION/tag
 mismatch, then publishes a source archive + `SHA256SUMS` and opens the release
-with the tag annotation as its body. Never create releases by hand.
+with the tag annotation as its body. The archive is reproducible: `git archive`
+to tar, `gzip -n`, and the workflow rebuilds it once to compare digests. Never
+create releases by hand.
 
 **Run all five before considering a change done.** Style: shfmt `-i 2 -ci`,
 ShellCheck-clean (SC1090/SC1091 exempt for dynamic sourcing), shellcheck

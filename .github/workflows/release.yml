@@ -70,11 +70,30 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Deterministic on purpose: same commit must give the same bytes, so a
+      # published checksum can be reproduced by anyone. `gzip -n` drops the
+      # timestamp git archive would otherwise embed.
       - name: Build source archive and checksums
         run: |
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
           name="tophat-${GITHUB_REF_NAME}"
-          git archive --format=tar.gz --prefix="${name}/" -o "${name}.tar.gz" HEAD
-          sha256sum "${name}.tar.gz" > SHA256SUMS
+
+          git archive --format=tar --prefix="${name}/" -o "${name}.tar" HEAD
+          gzip -n -9 "${name}.tar"
+          rm -f "${name}.tar"
+
+          git archive --format=tar --prefix="${name}/" -o /tmp/rebuild.tar HEAD
+          gzip -n -9 -c /tmp/rebuild.tar >/tmp/rebuild.tar.gz
+
+          first="$(sha256sum "${name}.tar.gz" | cut -d' ' -f1)"
+          second="$(sha256sum /tmp/rebuild.tar.gz | cut -d' ' -f1)"
+          if [[ "$first" != "$second" ]]; then
+            echo "::error::archive is not reproducible ($first vs $second)"
+            exit 1
+          fi
+          echo "reproducible archive: $first"
+
+          printf '%s  %s\n' "$first" "${name}.tar.gz" > SHA256SUMS
           cat SHA256SUMS
 
       # The annotated tag body is the release body: it is written once, at tag

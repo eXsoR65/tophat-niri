@@ -218,6 +218,28 @@ not new features.
 - [ ] **9.8** Pin workflow actions to reviewed commit SHAs once Dependabot is
       keeping them current.
 
+## Phase 10 — Reliability and test infrastructure (review Phases B/C)
+
+- [x] **10.1** Configuration-aware markers: each marker stores version, target
+      user and a snapshot of the package lists; any change re-runs that stage
+      with a logged reason (`tests/marker_invalidation_test.sh`).
+- [x] **10.2** Concurrent runs: atomic `mkdir` lock with a pid file and stale
+      lock breaking; dry runs are exempt (`tests/locking_test.sh`).
+- [x] **10.3** Interruption and failure tests: a failed or interrupted stage
+      never writes a marker, so a rerun resumes instead of skipping
+      (`tests/failure_recovery_test.sh`).
+- [x] **10.4** Failure recovery hint: the error trap says completed stages are
+      recorded and points at `--force` for re-running them.
+- [x] **10.5** Full dry-run install in CI: all seven stages walked on
+      `fedora:latest` and `fedora:45` against a throwaway user.
+- [x] **10.6** Reproducible release archive: `git archive` + `gzip -n`, rebuilt
+      in-workflow and digest-compared before upload.
+- [x] **10.7** `docs/INTEGRATION-TESTING.md` states exactly what CI proves and
+      what needs a VM or GPU, with the manual procedure for each.
+- [ ] **10.8** Run the VM scenarios in `docs/INTEGRATION-TESTING.md` (fresh
+      install, rerun, interrupted run, upgrade) on a Fedora Minimal VM.
+- [ ] **10.9** Run the real-GPU checklist on the laptop (also covers 8.6).
+
 ## Suggested commit order
 
 1. Phase 1 (single commit)
