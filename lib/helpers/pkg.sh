@@ -11,6 +11,7 @@ pkg_install() {
   local pkgs=("$@")
   local desc="Installing packages: ${pkgs[*]}"
   local to_install=()
+  local pkg
 
   for pkg in "${pkgs[@]}"; do
     if rpm -q "$pkg" &>/dev/null; then

@@ -8,8 +8,31 @@ export IS_ROOT=false
 export NETWORK_OK=false
 export SETUP_PREVIOUSLY_COMPLETED=false
 
+# Fail fast and clearly on a non-Fedora host. Without this the next command
+# (`rpm -E %fedora`) dies from `set -e` with "rpm: command not found", which
+# reads like a Tophat bug rather than an unsupported system.
+# Takes an explicit path so it can be tested without touching /etc/os-release.
+require_fedora() {
+  local os_release="${1:-/etc/os-release}"
+  local detected="unknown"
+
+  if [[ -r "$os_release" ]]; then
+    detected="$(sed -n 's/^PRETTY_NAME="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$os_release" | head -1)"
+    [[ -n "$detected" ]] || detected="unknown"
+    if grep -qE '^ID="?fedora"?$' "$os_release"; then
+      return 0
+    fi
+  fi
+
+  log_error "Tophat only installs on Fedora. Detected: $detected"
+  log_error "Nothing has been changed."
+  exit 1
+}
+
 detect_environment() {
   log_info "Detecting system environment..."
+
+  require_fedora /etc/os-release
 
   FEDORA_VERSION="$(rpm -E %fedora)"
   log_info "Fedora release: $FEDORA_VERSION"

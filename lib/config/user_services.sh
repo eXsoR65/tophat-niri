@@ -20,10 +20,18 @@ log_info "Configuring user-level services for $TARGET_USER..."
 # -----------------------------------------------------------------------------
 log_info "Creating user config directories..."
 if [[ "$DRY_RUN" != true ]]; then
-  mkdir -p "${TARGET_USER_HOME}/.config/systemd/user"
-  mkdir -p "${TARGET_USER_HOME}/.config/environment.d"
-  mkdir -p "${TARGET_USER_HOME}/.config/niri"
-  chown -R "${TARGET_USER}:${TARGET_USER}" "${TARGET_USER_HOME}/.config"
+  _config_root="${TARGET_USER_HOME}/.config"
+  _target_group="$(id -gn "$TARGET_USER")"
+
+  mkdir -p "$_config_root/systemd/user"
+  mkdir -p "$_config_root/environment.d"
+  mkdir -p "$_config_root/niri"
+
+  # Only take ownership of the paths Tophat creates. A blanket `chown -R` over
+  # ~/.config would also re-own files the user (or another tool) owns on purpose.
+  chown "$TARGET_USER:$_target_group" "$_config_root" "$_config_root/systemd"
+  chown -R "$TARGET_USER:$_target_group" \
+    "$_config_root/systemd/user" "$_config_root/environment.d" "$_config_root/niri"
   log_ok "Config directories created"
 fi
 
@@ -63,7 +71,7 @@ if [[ "$DRY_RUN" != true ]]; then
 
   if [[ -n "$DMS_SERVICE_PATH" ]]; then
     ln -sf "$DMS_SERVICE_PATH" "$WANTS_DIR/dms.service"
-    chown -R "${TARGET_USER}:${TARGET_USER}" "$WANTS_DIR"
+    chown -R "$TARGET_USER:$_target_group" "$WANTS_DIR"
     log_ok "DMS linked to niri.service (symlink created)"
   else
     log_warn "Could not find dms.service in system user units"

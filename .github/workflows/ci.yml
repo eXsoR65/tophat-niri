@@ -20,6 +20,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y shellcheck shfmt
 
+      # VERSION and the install.sh header drift apart easily; the release
+      # workflow only compares VERSION against the tag.
+      - name: Version consistency
+        run: |
+          version="$(<VERSION)"
+          header="$(sed -n '3s/.*Tophat v\([0-9][0-9.]*\).*/\1/p' install.sh)"
+          echo "VERSION=${version} install.sh=${header}"
+          if [[ "$version" != "$header" ]]; then
+            echo "::error::VERSION (${version}) disagrees with the install.sh header (${header})"
+            exit 1
+          fi
+
       - name: Bash syntax
         run: |
           find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n

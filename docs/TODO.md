@@ -111,11 +111,14 @@ a target machine except the new `--version` flag.
 - [x] **5.5** `dev` fast-forwarded to `main` after the v2.3 release, so the
       integration branch is no longer stale.
 
-## Phase 6 — Backlog (not started)
+## Phase 6 — Backlog
 
-- [ ] **6.1** Stage-level tests for the five stages that have none:
-      `preflight`, `repos`, `packaging`, `services`, `extras`. Only `config` and
-      `finalize` are covered today.
+- [x] **6.1** Stage-level tests for the five stages that had none:
+      `preflight` (distro guard + hardware detection), `repos` (all repositories,
+      single `makecache`, marker skip), `packaging` (Intel Wi-Fi conditional, DMS,
+      optional apps, marker skip), `services` (greeter backup/idempotency,
+      missing dms-greeter refusal), `extras` (skip without opt-ins, input
+      validation, distrobox resolution). Eleven test files now.
 - [ ] **6.2** Decide the fate of the `dotfiles.sh` stub (deferred from 4.4):
       implement behind an opt-in file, or delete it.
 - [ ] **6.3** Community files: `CONTRIBUTING.md`, issue templates,
@@ -127,23 +130,42 @@ a target machine except the new `--version` flag.
 
 ### From the v2.4 repository review
 
-- [ ] **6.6** Fail *clearly* on non-Fedora hosts. `detect_environment` runs
-      `rpm -E %fedora` as its first command, so on a non-Fedora system the
-      script dies from `set -e` with an opaque error instead of "this only runs
-      on Fedora". Add an explicit distro guard before it.
-- [ ] **6.7** `services` overwrites `/etc/greetd/config.toml` unconditionally on
-      a `--force` re-run, with no backup and no "already configured" check. A
-      user who customised their greeter loses that file silently.
-- [ ] **6.8** `config` does `chown -R "$TARGET_USER:$TARGET_USER" ~/.config`,
-      which re-owns *everything* under the user's config directory, not just the
-      three directories Tophat creates. Narrow it to the paths it owns.
-- [ ] **6.9** Confirm `packages/intel-wifi.packages`: it lists only
-      `iwlwifi-dvm-firmware`, while the hardware check matches any Intel Wi-Fi.
-      Modern (AX2xx) parts use the mvm firmware; verify on the test laptop
-      whether this list is actually what supplies firmware.
-- [ ] **6.10** CI does not verify that `install.sh`'s header version matches
-      `VERSION` (the release workflow checks VERSION against the tag only), so
-      the two can drift unnoticed.
+- [x] **6.6** Fail *clearly* on non-Fedora hosts: `require_fedora` checks
+      `ID=fedora` in `/etc/os-release` before the first `rpm` call and names the
+      detected system. Takes an explicit path so the guard is testable.
+- [x] **6.7** `services` no longer clobbers `/etc/greetd/config.toml`: it writes
+      only when the content differs and backs the old file up to
+      `.tophat-backup.<timestamp>` first.
+- [x] **6.8** `config` chowns only the paths it creates (the three `~/.config`
+      subtrees plus their parents) instead of `~/.config` recursively, and uses
+      the user's primary group rather than assuming group == username.
+- [x] **6.9** *Not a defect.* `packages/intel-wifi.packages` already lists
+      `iwlwifi-dvm-firmware`, `iwlwifi-mld-firmware` **and** `iwlwifi-mvm-firmware`.
+      The earlier finding came from reviewing truncated `head -80` output. The
+      new packaging test now asserts the firmware set is installed when Intel
+      Wi-Fi is detected and skipped when it is not.
+- [x] **6.10** CI now asserts that `VERSION` matches the version in the
+      `install.sh` header (new `Version consistency` step in the `shell` job).
+
+## Phase 7 — v2.5 review fixes (low severity, all landed)
+
+- [x] **7.1** Removed four unreferenced asset files (two PNGs, two SVGs); the
+      release archive drops from ~6.8 MB to ~1.5 MB. They remain in git history:
+      `git checkout 0a98a7c -- <path>` restores any of them.
+- [x] **7.2** `pkg_install` declares its loop variable `local` (it was leaking
+      `pkg` into the global scope).
+- [x] **7.3** `check_network_connectivity` passes the host to the TCP probe as a
+      positional argument and rejects anything that is not a hostname/IP, so a
+      host can never be evaluated as shell code.
+- [x] **7.4** One `dnf makecache` per repos stage (it ran twice, before the COPRs
+      existed and again after).
+- [x] **7.5** A missing `applications.packages` logs one informational line
+      instead of two warnings on every run.
+- [x] **7.6** `finalize` records `user=unknown` rather than `user=x` when no target
+      user was ever resolved.
+- [x] **7.7** `homebrew.sh`'s temporary installer file: the `EXIT` trap is the
+      only one in the script and is cleared on the success path, so it is left as
+      is and documented here rather than replaced.
 
 ## Suggested commit order
 

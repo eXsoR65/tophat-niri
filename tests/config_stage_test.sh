@@ -50,13 +50,19 @@ fi
 exit 2
 STUB
 
-# id: the fake target user must "exist" for resolve_target_user; anything else
-# is delegated to the real id so unrelated lookups keep working.
+# id: the fake target user must "exist" for resolve_target_user, and the config
+# stage asks for its primary group; anything else is delegated to the real id.
 cat >"$stub_dir/id" <<STUB
 #!/bin/bash
-if [[ "\${1:-}" == "$TEST_USER" ]]; then
-  exit 0
-fi
+for arg in "\$@"; do
+  if [[ "\$arg" == "$TEST_USER" ]]; then
+    case "\${1:-}" in
+      -gn | -g) echo "$TEST_USER" ;;
+      -un | -u) echo "1000" ;;
+    esac
+    exit 0
+  fi
+done
 exec "$REAL_ID" "\$@"
 STUB
 

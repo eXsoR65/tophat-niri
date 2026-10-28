@@ -37,7 +37,7 @@ run_finalize_stage() {
   GPU_VENDOR="${GPU_VENDOR:-unknown}"
   FORM_FACTOR="${FORM_FACTOR:-unknown}"
   HAS_INTEL_WIFI="${HAS_INTEL_WIFI:-unknown}"
-  TARGET_USER="${TARGET_USER:-x}"
+  TARGET_USER="${TARGET_USER:-unknown}"
   NIRI_COPR="${NIRI_COPR:-yalter/niri}"
   DMS_COPR="${DMS_COPR:-avengemedia/dms}"
 

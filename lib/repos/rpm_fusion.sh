@@ -11,5 +11,5 @@ fi
 log_info "Setting up RPM Fusion repositories"
 repo_enable_rpm_fusion
 
-# Refresh metadata
-run_logged "Refreshing package metadata" dnf makecache
+# Metadata is refreshed once, at the end of the repos stage (repos/copr.sh),
+# after every repository has been added.

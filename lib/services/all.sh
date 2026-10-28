@@ -5,6 +5,40 @@
 #  automatically when the user logs in.
 # =============================================================================
 
+GREETD_CONFIG_DEFAULT="/etc/greetd/config.toml"
+
+_greetd_config_body() {
+  cat <<'GREETD_EOF'
+[terminal]
+vt = 1
+
+[default_session]
+user = "greeter"
+command = "dms-greeter --command niri"
+GREETD_EOF
+}
+
+# Write the greeter config only when it differs, and back up anything already
+# there. A hand-edited greetd config must not silently vanish on a --force run.
+write_greetd_config() {
+  local config_file="${1:-$GREETD_CONFIG_DEFAULT}"
+  local backup=""
+
+  if [[ -f "$config_file" ]]; then
+    if diff -q <(_greetd_config_body) "$config_file" >/dev/null 2>&1; then
+      log_ok "greetd config already up to date: $config_file"
+      return 0
+    fi
+    backup="${config_file}.tophat-backup.$(date '+%Y%m%dT%H%M%S%z')"
+    cp -a -- "$config_file" "$backup"
+    log_warn "Existing greeter config differed; backed up to $backup"
+  fi
+
+  _greetd_config_body >"$config_file"
+  chmod 0644 "$config_file"
+  log_ok "greetd configuration written: $config_file"
+}
+
 run_services_stage() {
   if stage_already_run "services"; then
     log_info "Services stage already completed; skipping"
@@ -28,18 +62,10 @@ run_services_stage() {
     mkdir -p /etc/greetd
 
   if [[ "$DRY_RUN" == true ]]; then
-    log_info "[DRY-RUN] Would write /etc/greetd/config.toml for DMS Greeter"
+    log_info "[DRY-RUN] Would write $GREETD_CONFIG_DEFAULT for DMS Greeter"
   else
-    log_info "Writing /etc/greetd/config.toml for DMS Greeter"
-    cat >/etc/greetd/config.toml <<'GREETD_EOF'
-[terminal]
-vt = 1
-
-[default_session]
-user = "greeter"
-command = "dms-greeter --command niri"
-GREETD_EOF
-    log_ok "greetd configuration written"
+    log_info "Writing $GREETD_CONFIG_DEFAULT for DMS Greeter"
+    write_greetd_config "$GREETD_CONFIG_DEFAULT"
   fi
 
   # Make greetd unlock/start gnome-keyring during user login.

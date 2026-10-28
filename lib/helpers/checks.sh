@@ -52,11 +52,17 @@ read_list_file() {
 check_network_connectivity() {
   local host="${1:-dl.fedoraproject.org}"
 
+  # Only hostnames/IPs: the hostname is also passed to a subshell below.
+  [[ "$host" =~ ^[A-Za-z0-9._:-]+$ ]] || return 1
+
   if cmd_present ping && ping -c 1 -W 3 "$host" &>/dev/null; then
     return 0
   fi
 
-  timeout 5 bash -c ": >/dev/tcp/${host}/443" &>/dev/null
+  # Pass the host as a positional argument rather than interpolating it into
+  # the script text, so nothing in $host can ever be evaluated as shell code.
+  # shellcheck disable=SC2016 # $1 expands inside the child shell, not here
+  timeout 5 bash -c 'exec 3<>"/dev/tcp/$1/443"' _ "$host" &>/dev/null
 }
 
 # Resolve the non-root user this setup should configure.

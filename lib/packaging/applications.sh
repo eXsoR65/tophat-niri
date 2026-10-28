@@ -9,6 +9,5 @@ log_info "Installing user applications..."
 if [[ -f "$SETUP_PACKAGES/applications.packages" ]]; then
   pkg_install_from_list "$SETUP_PACKAGES/applications.packages"
 else
-  log_warn "applications.packages not found. Skipping application installs."
-  log_warn "Create a ./packages/applications.packages file to install apps."
+  log_info "No applications.packages; skipping user app installs (copy the template to opt in)"
 fi
