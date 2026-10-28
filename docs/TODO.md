@@ -236,7 +236,12 @@ not new features.
       in-workflow and digest-compared before upload.
 - [x] **10.7** `docs/INTEGRATION-TESTING.md` states exactly what CI proves and
       what needs a VM or GPU, with the manual procedure for each.
-- [ ] **10.8** Run the VM scenarios in `docs/INTEGRATION-TESTING.md` (fresh
+- [x] **10.8a** Automated harness written: `.github/workflows/integration.yml`
+      (dispatched real install in a systemd container) and
+      `tests/integration/container-install.sh`, plus a drafted
+      `tests/integration/proxmox-test.sh` for VM-level runs.
+- [ ] **10.8b** Run the integration workflow once and fix whatever it finds.
+- [ ] **10.8c** Run the VM scenarios in `docs/INTEGRATION-TESTING.md` (fresh
       install, rerun, interrupted run, upgrade) on a Fedora Minimal VM.
 - [ ] **10.9** Run the real-GPU checklist on the laptop (also covers 8.6).
 

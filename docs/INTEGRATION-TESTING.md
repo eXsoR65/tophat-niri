@@ -3,6 +3,32 @@
 What is automated, what is not, and the manual procedure for the gap. Written so
 the limits are explicit rather than implied by a green check mark.
 
+## Tiers
+
+| Tier | Trigger | Runs | Proves |
+|---|---|---|---|
+| 0 — fast | every push / PR | `tests/*_test.sh`, full dry run, package + upstream-repo checks (`.github/workflows/ci.yml`) | logic, CLI, markers, locking, stage wiring on a real Fedora userspace |
+| 1 — real install | **manual**: Actions → *Integration* → Run workflow (`.github/workflows/integration.yml`) | `tests/integration/container-install.sh` in a privileged systemd container | real dnf transactions, RPM Fusion + COPRs resolving, greetd enablement, PAM edits, marker contents, idempotent rerun, marker invalidation |
+| 2 — VM | manual, on the Proxmox host | `tests/integration/proxmox-test.sh` (draft) | everything above plus **reboot** behaviour, on a real Fedora Minimal install |
+| 3 — hardware | manual | this document | GPU path, graphical login, niri/DMS session |
+
+Tier 1 is dispatched rather than scheduled on purpose: it pulls the whole
+desktop stack (several GB, 10–20 min), which is the wrong cost for every push.
+Promote it to a schedule once it has a stable history.
+
+Tier 2 is a draft: reviewed and dry-run (`DRY_RUN=1 ./proxmox-test.sh`) but not
+yet executed against a real Proxmox host. It needs a Fedora Minimal template
+with `qemu-guest-agent`, an SSH key for the guest user, and sudo.
+
+```bash
+# Tier 1: click Run workflow, or from a machine with gh authenticated:
+gh workflow run integration -f container=fedora:45
+
+# Tier 2, on the Proxmox host:
+TEMPLATE_VMID=9000 GUEST_USER=xavier DRY_RUN=1 ./tests/integration/proxmox-test.sh   # preview
+TEMPLATE_VMID=9000 GUEST_USER=xavier ./tests/integration/proxmox-test.sh             # real
+```
+
 ## What CI proves
 
 | Layer | Where | What it actually verifies |
@@ -12,10 +38,10 @@ the limits are explicit rather than implied by a green check mark.
 | Package availability | same containers | Every package we install from Fedora repos resolves on that release, and RPM Fusion plus the four COPR chroots publish a tree for it |
 | Release artifacts | `release.yml` | Tag matches `VERSION`, gates pass, archive is byte-for-byte reproducible, `SHA256SUMS` published |
 
-## What CI cannot prove
+## What even Tier 1 cannot prove
 
-GitHub-hosted runners cannot run a booted Fedora system with systemd, real dnf
-transactions and a GPU. These therefore require a VM or hardware:
+Tier 1 has real systemd and real dnf, but no firmware, no DRM and no reboot.
+These therefore require a VM (Tier 2) or hardware (Tier 3):
 
 - a real fresh install (actual package installation, greetd enablement, PAM)
 - rerun/idempotency against real markers and real `dnf`
