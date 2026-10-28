@@ -2,6 +2,13 @@
 #  finalize/all.sh — Cleanup and completion marker
 # =============================================================================
 
+# Preview first (changes nothing), then remove only on an explicit decision.
+autoremove_orphans() {
+  log_info "Previewing the packages dnf would autoremove (no changes yet)"
+  dnf autoremove --assumeno >>"$SETUP_LOG" 2>&1 || true
+  run_logged "Autoremoving orphaned packages" dnf autoremove -y
+}
+
 run_finalize_stage() {
   if stage_already_run "finalize"; then
     log_info "Finalize stage already completed; skipping"
@@ -9,9 +16,10 @@ run_finalize_stage() {
   fi
 
   # Guard: never mark a system complete while earlier stages have not run.
-  # A false .completed marker would mislead later runs. Extras is excluded
-  # because it is intentionally marker-less when no opt-ins are enabled.
-  if [[ "$FORCE" != true && "$DRY_RUN" != true ]]; then
+  # A false .completed marker would mislead every later run, so --force does
+  # not bypass this. Extras is excluded because it is intentionally
+  # marker-less when no opt-ins are enabled.
+  if [[ "$DRY_RUN" != true ]]; then
     local missing_stages=()
     local required_stage
     for required_stage in preflight repos packaging config services; do
@@ -27,7 +35,7 @@ run_finalize_stage() {
         echo "${missing_stages[*]}"
       )"
       log_error "Refusing to finalize: incomplete stages: ${missing_stages[*]}"
-      log_error "Run them first (--select $missing_csv) or re-run with --force"
+      log_error "Run them first (--select $missing_csv)"
       exit 1
     fi
   fi
@@ -44,8 +52,26 @@ run_finalize_stage() {
   # Clean up DNF cache
   run_logged "Cleaning DNF cache" dnf clean packages
 
-  # Autoremove orphaned packages (leftovers from removals)
-  run_logged "Autoremoving orphaned packages" dnf autoremove -y
+  # `dnf autoremove` removes anything the solver considers unneeded, which can
+  # be more than the replacement list. That is destructive and system-wide, so
+  # it follows the same consent rule as pkg_remove() instead of always running.
+  if [[ "$DRY_RUN" == true ]]; then
+    log_info "[DRY-RUN] Would preview orphaned packages and remove them only on consent"
+  elif [[ "${ACCEPT_PACKAGE_REMOVALS:-false}" == true ]]; then
+    autoremove_orphans
+  elif [[ -t 0 ]]; then
+    log_warn "dnf autoremove removes packages the solver considers unneeded,"
+    log_warn "which can be more than the replacement list."
+    printf 'Run dnf autoremove now? [y/N] '
+    local answer=""
+    read -r answer
+    case "$answer" in
+      y | Y | yes | YES) autoremove_orphans ;;
+      *) log_warn "Skipped automatic package removal; run 'sudo dnf autoremove' yourself if wanted" ;;
+    esac
+  else
+    log_warn "Skipping automatic package removal (needs --accept-package-removals or a TTY)"
+  fi
 
   # Write completion marker
   if [[ "$DRY_RUN" != true ]]; then

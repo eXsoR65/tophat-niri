@@ -58,6 +58,15 @@ expect_error "--target-user requires a username" --target-user --verbose
 expect_error "Unknown option: --bogus" --bogus
 expect_error "Unknown option: -x" -x
 
+# --- Malformed --select lists are rejected ------------------------------------
+# An empty value used to mean "no selection" = install everything, which is the
+# opposite of what a script passing "" intends.
+select_msg="--select expects comma-separated stage names"
+expect_error "$select_msg" --select ""
+expect_error "$select_msg" --select "repos,"
+expect_error "$select_msg" --select ",repos"
+expect_error "$select_msg" --select "repos,,config"
+
 # --- Values that look like flags are rejected even when more args follow -----
 expect_error "--select requires a comma-separated stage list" --select --force repos
 expect_error "--target-user requires a username" --target-user --force alice

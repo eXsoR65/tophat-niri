@@ -77,6 +77,28 @@ grep -q "my own customisation" "$backup" || fail "backup does not hold the origi
 [[ "$(<"$expected_config")" == "$(<"$custom_config")" ]] || fail "custom config was not replaced"
 grep -q "backed up" "$SETUP_LOG" || fail "backup not logged"
 
+# --- PAM hooks are added per missing hook, with a backup --------------------
+pam_file="$tmp_dir/pam/greetd"
+mkdir -p "$(dirname "$pam_file")"
+printf '#%%PAM-1.0\nauth       include      system-auth\n-auth optional pam_gnome_keyring.so\n' >"$pam_file"
+
+ensure_pam_keyring_hooks "$pam_file" >/dev/null
+grep -qF -- '-session optional pam_gnome_keyring.so auto_start' "$pam_file" ||
+  fail "missing session hook not added"
+grep -qF -- '-password optional pam_gnome_keyring.so use_authtok' "$pam_file" ||
+  fail "missing password hook not added"
+grep -qF -- 'auth       include      system-auth' "$pam_file" ||
+  fail "existing PAM content was not preserved"
+pam_backups="$(find "$(dirname "$pam_file")" -name 'greetd.tophat-backup.*' | wc -l)"
+[[ "$pam_backups" -eq 1 ]] || fail "PAM file not backed up exactly once (got $pam_backups)"
+
+# Second run adds nothing and creates no further backup
+: >"$SETUP_LOG"
+ensure_pam_keyring_hooks "$pam_file" >/dev/null
+pam_backups_after="$(find "$(dirname "$pam_file")" -name 'greetd.tophat-backup.*' | wc -l)"
+[[ "$pam_backups_after" -eq 1 ]] || fail "second PAM run created another backup"
+grep -q "already has all gnome-keyring hooks" "$SETUP_LOG" || fail "PAM idempotency not logged"
+
 # --- A completed stage is skipped --------------------------------------------
 date '+%Y-%m-%d %H:%M:%S' >"$SETUP_STATE_DIR/stage-services.done"
 : >"$SYSTEMCTL_CALLS"

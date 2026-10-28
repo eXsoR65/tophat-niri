@@ -1,6 +1,6 @@
 # TODO — Tophat Improvement Plan
 
-Derived from the codebase review (see `.agent.md`). Items are grouped into
+Derived from the codebase review (see `AGENT.md`). Items are grouped into
 phases; each phase should land with all CI gates green:
 
 ```bash
@@ -189,6 +189,34 @@ branched tree and a real `fedora:45` container, not a released Fedora.
       path is the one real installs will use.
 - [ ] **8.6** Live validation of v2.5 (and F45) on the laptop, since v2.5
       changes installer behaviour.
+
+## Phase 9 — Installation safety (review Phase A)
+
+From the 2026-10-28 repository review. The theme is installing/rerunning safety,
+not new features.
+
+- [x] **9.1** `--select` validation: an empty value used to mean "no selection",
+      i.e. install everything. Empty, leading/trailing and doubled commas are now
+      rejected, with the stage list echoed back.
+- [x] **9.2** `dnf autoremove` in `finalize` is opt-in: it previews the
+      transaction (`--assumeno`), then removes only with
+      `--accept-package-removals` or a TTY confirmation. Otherwise it is skipped
+      with guidance.
+- [x] **9.3** `finalize`'s prerequisite guard is no longer bypassable with
+      `--force` — force re-runs stages, it does not let an incomplete install be
+      marked complete.
+- [x] **9.4** Greeter config is written atomically (same-directory temp file +
+      rename) after its backup, and `/etc/pam.d/greetd` is backed up before
+      modification with every gnome-keyring hook verified individually.
+- [x] **9.5** Release workflow: `contents: write` is scoped to the publishing
+      job; the verify job runs with `contents: read`.
+- [x] **9.6** README release example derives the tag from `VERSION`, so it can no
+      longer go stale (it said v2.4 while the source said 2.5).
+- [ ] **9.7** *Needs repository admin, not code:* protect `main` — require the
+      `shell` and `fedora` checks, block force-pushes, require a PR for changes.
+      Both branches report `protected: false` today.
+- [ ] **9.8** Pin workflow actions to reviewed commit SHAs once Dependabot is
+      keeping them current.
 
 ## Suggested commit order
 

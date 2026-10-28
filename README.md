@@ -229,8 +229,9 @@ automatically.
 Releases are cut from a tag; nothing is published by hand:
 
 ```bash
-git tag -a v2.4 -m "Tophat v2.4"    # VERSION must match the tag (v2.4 -> 2.4)
-git push origin v2.4
+version="$(<VERSION)"
+git tag -a "v${version}" -m "Tophat v${version}"   # tag must match VERSION
+git push origin "v${version}"
 ```
 
 The `Release` workflow then re-runs all five gates, refuses to publish if

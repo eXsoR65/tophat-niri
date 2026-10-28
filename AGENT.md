@@ -5,7 +5,7 @@ first; the README covers user-facing usage.
 
 ## Project identity
 
-- **Name:** Tophat (version in `VERSION`, currently 2.5; last release: v2.4)
+- **Name:** Tophat (version in `VERSION`, currently 2.6; last release: v2.4)
 - **Purpose:** Opinionated installer that transforms a **Fedora Minimal**
   install into a **niri + DankMaterialShell (DMS)** workstation. Inspired by
   Omarchy's staged flow.
@@ -106,7 +106,10 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
    `$(...)`: a spawned grandchild inheriting stdout holds the pipe open and
    hangs the caller — redirect to a file with stdin detached instead.
 7. **Destructive actions** require `--accept-package-removals` or a TTY
-   confirmation (`pkg_remove`).
+   confirmation: `pkg_remove` for the replacement list, and `finalize`'s
+   `dnf autoremove` (which can remove more than that list, since it removes
+   whatever the solver calls unneeded). Without consent the autoremove is
+   skipped, with a message telling the user to run it themselves.
 8. **Logs/state**: live runs write `/var/log/tophat/runs/<timestamp>.log`
    (0640) with `latest.log` symlink, and state under `/var/lib/tophat/`.
 
@@ -124,14 +127,19 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
   `ID=fedora` in `/etc/os-release` *before* the first `rpm` call, so a
   non-Fedora host gets a clear message instead of `rpm: command not found`.
   It takes an explicit path, which is how the test exercises it.
-- `services` writes `/etc/greetd/config.toml` only when it differs, and backs up
-  a differing file to `<path>.tophat-backup.<timestamp>` first — a hand-edited
-  greeter config survives a `--force` re-run.
+- `services` writes `/etc/greetd/config.toml` only when it differs, backs a
+  differing file up to `<path>.tophat-backup.<timestamp>`, and installs it with
+  a same-directory `mktemp` + `mv` so a partial write can never leave the
+  machine without a greeter. `/etc/pam.d/greetd` is backed up the same way, and
+  each gnome-keyring hook (auth/session/password) is verified individually — a
+  file can mention `pam_gnome_keyring.so` on one line and still not auto-start
+  the keyring.
 - `config` chowns only the paths it creates (the three `~/.config` subtrees),
   not `~/.config` recursively.
 - `--select finalize` refuses to run (and won't write `.completed`) while any
-  of preflight/repos/packaging/config/services markers are missing, unless
-  `--force` is given (D2.3).
+  of preflight/repos/packaging/config/services markers are missing. `--force`
+  does **not** bypass this: a false `.completed` marker would mislead every
+  later run, so force only re-runs stages (D2.3, revised in v2.6).
 
 ## Planned work
 

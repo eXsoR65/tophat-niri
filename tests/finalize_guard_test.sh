@@ -19,9 +19,17 @@ export TOPHAT_VERSION="test"
 mkdir -p "$SETUP_STATE_DIR"
 touch "$SETUP_LOG"
 
+DNF_CALLS="$tmp_dir/dnf-calls"
+export DNF_CALLS
+: >"$DNF_CALLS"
+
 stub_dir="$tmp_dir/bin"
 mkdir -p "$stub_dir"
-printf '#!/bin/bash\nexit 0\n' >"$stub_dir/dnf"
+cat >"$stub_dir/dnf" <<'STUB'
+#!/bin/bash
+echo "$*" >>"$DNF_CALLS"
+exit 0
+STUB
 chmod +x "$stub_dir/dnf"
 export PATH="$stub_dir:$PATH"
 
@@ -68,11 +76,37 @@ run_finalize_stage >/dev/null
 grep -q "^version=test$" "$SETUP_STATE_DIR/.completed" ||
   fail ".completed missing version entry"
 
-# --- --force overrides the guard ----------------------------------------------
+# --- Autoremove is opt-in -----------------------------------------------------
+: >"$DNF_CALLS"
+export SETUP_STATE_DIR="$tmp_dir/no-consent-state"
+mkdir -p "$SETUP_STATE_DIR"
+for stage in preflight repos packaging config services; do mark_done "$stage"; done
+run_finalize_stage >/dev/null
+grep -q -- "autoremove -y" "$DNF_CALLS" &&
+  fail "autoremove ran without consent: $(cat "$DNF_CALLS")"
+grep -q "Skipping automatic package removal" "$SETUP_LOG" || fail "skip not logged"
+
+# --- ...but it runs when consent was given at the command line ---------------
+: >"$DNF_CALLS"
+export SETUP_STATE_DIR="$tmp_dir/consent-state"
+mkdir -p "$SETUP_STATE_DIR"
+for stage in preflight repos packaging config services; do mark_done "$stage"; done
+ACCEPT_PACKAGE_REMOVALS=true run_finalize_stage >/dev/null
+grep -q -- "autoremove -y" "$DNF_CALLS" ||
+  fail "autoremove did not run with --accept-package-removals"
+grep -q -- "autoremove --assumeno" "$DNF_CALLS" ||
+  fail "removal transaction was not previewed first"
+
+# --- --force does not bypass the guard ---------------------------------------
+# A false .completed marker misleads every later run, so force only re-runs
+# stages; it does not let finalize declare an incomplete install finished.
 export SETUP_STATE_DIR="$tmp_dir/forced-state"
 mkdir -p "$SETUP_STATE_DIR"
-FORCE=true run_finalize_stage >/dev/null
-[[ -f "$SETUP_STATE_DIR/.completed" ]] || fail ".completed not written with --force"
+# Subshell: the stage exits 1.
+if (FORCE=true run_finalize_stage) >/dev/null 2>&1; then
+  fail "--force bypassed the finalize guard"
+fi
+[[ ! -e "$SETUP_STATE_DIR/.completed" ]] || fail ".completed written despite refusal"
 
 # --- Dry run does not trip the guard -------------------------------------------
 export SETUP_STATE_DIR="$tmp_dir/dry-state"

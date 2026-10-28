@@ -22,7 +22,9 @@ GREETD_EOF
 # there. A hand-edited greetd config must not silently vanish on a --force run.
 write_greetd_config() {
   local config_file="${1:-$GREETD_CONFIG_DEFAULT}"
-  local backup=""
+  local config_dir tmp backup=""
+
+  config_dir="$(dirname -- "$config_file")"
 
   if [[ -f "$config_file" ]]; then
     # Plain string comparison: neither diff nor cmp is guaranteed on a Fedora
@@ -36,9 +38,66 @@ write_greetd_config() {
     log_warn "Existing greeter config differed; backed up to $backup"
   fi
 
-  _greetd_config_body >"$config_file"
-  chmod 0644 "$config_file"
+  # Write beside the target and rename: a half-written greeter config would
+  # leave the machine unable to start a graphical session.
+  tmp="$(mktemp "${config_dir}/.tophat-greetd.XXXXXX")"
+  _greetd_config_body >"$tmp"
+  chmod 0644 "$tmp"
+  mv -f -- "$tmp" "$config_file"
   log_ok "greetd configuration written: $config_file"
+}
+
+# ---- 2. PAM hooks: per-hook verification, backup, atomic replace ---------
+PAM_FILE_DEFAULT="/etc/pam.d/greetd"
+
+_pam_required_hooks() {
+  printf '%s\n' \
+    '-auth optional pam_gnome_keyring.so' \
+    '-session optional pam_gnome_keyring.so auto_start' \
+    '-password optional pam_gnome_keyring.so use_authtok'
+}
+
+# Appends only the hooks that are actually missing, after backing the file up.
+# Checking one generic reference is not enough: a PAM file can mention
+# pam_gnome_keyring.so on the auth line and still fail to auto-start the keyring.
+ensure_pam_keyring_hooks() {
+  local pam_file="${1:-$PAM_FILE_DEFAULT}"
+  local hook backup tmp missing=()
+
+  if [[ ! -f "$pam_file" ]]; then
+    log_warn "$pam_file not found; cannot configure gnome-keyring PAM hooks"
+    return 0
+  fi
+
+  while IFS= read -r hook; do
+    [[ -n "$hook" ]] || continue
+    grep -qF -- "$hook" "$pam_file" || missing+=("$hook")
+  done <<<"$(_pam_required_hooks)"
+
+  if ((${#missing[@]} == 0)); then
+    log_ok "greetd PAM already has all gnome-keyring hooks"
+    return 0
+  fi
+
+  backup="${pam_file}.tophat-backup.$(date '+%Y%m%dT%H%M%S%z')"
+  cp -a -- "$pam_file" "$backup"
+  log_warn "Backed up $pam_file to $backup before adding ${#missing[@]} hook(s)"
+
+  tmp="$(mktemp "$(dirname -- "$pam_file")/.tophat-pam.XXXXXX")"
+  cat -- "$pam_file" >"$tmp"
+  {
+    printf '\n# Unlock/start GNOME Keyring for graphical sessions (added by Tophat)\n'
+    printf '%s\n' "${missing[@]}"
+  } >>"$tmp"
+  chmod 0644 "$tmp"
+  mv -f -- "$tmp" "$pam_file"
+
+  while IFS= read -r hook; do
+    [[ -n "$hook" ]] || continue
+    grep -qF -- "$hook" "$pam_file" ||
+      log_error "PAM hook still missing after write: $hook"
+  done <<<"$(_pam_required_hooks)"
+  log_ok "greetd PAM configured for gnome-keyring (${#missing[@]} hooks added)"
 }
 
 run_services_stage() {
@@ -74,23 +133,9 @@ run_services_stage() {
   # Without this, libsecret apps such as browsers may prompt to unlock
   # the login keyring after every graphical login.
   if [[ "$DRY_RUN" == true ]]; then
-    log_info "[DRY-RUN] Would configure /etc/pam.d/greetd for gnome-keyring"
-  elif [[ -f /etc/pam.d/greetd ]]; then
-    if grep -q "pam_gnome_keyring.so" /etc/pam.d/greetd; then
-      log_ok "greetd PAM already includes gnome-keyring"
-    else
-      log_info "Adding gnome-keyring PAM hooks to greetd"
-      cat >>/etc/pam.d/greetd <<'PAM_EOF'
-
-# Unlock/start GNOME Keyring for graphical sessions
--auth optional pam_gnome_keyring.so
--session optional pam_gnome_keyring.so auto_start
--password optional pam_gnome_keyring.so use_authtok
-PAM_EOF
-      log_ok "greetd PAM configured for gnome-keyring"
-    fi
+    log_info "[DRY-RUN] Would ensure gnome-keyring PAM hooks in $PAM_FILE_DEFAULT"
   else
-    log_warn "/etc/pam.d/greetd not found; cannot configure gnome-keyring PAM hooks"
+    ensure_pam_keyring_hooks "$PAM_FILE_DEFAULT"
   fi
 
   run_logged "Enabling greetd service" \
