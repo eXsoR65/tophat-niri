@@ -141,7 +141,7 @@ jobs:
               exit 1
             }
           done
-          grep -q 'Skipping automatic package removal' /tmp/dryrun.log || {
+          grep -q 'Would preview orphaned packages' /tmp/dryrun.log || {
             echo 'dry run did not exercise the autoremove consent path' >&2
             exit 1
           }
