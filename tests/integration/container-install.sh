@@ -48,6 +48,11 @@ grep -qx "version=${VERSION}" "$STATE_DIR/.completed" ||
 for stage in preflight repos packaging config services finalize; do
   marker="$STATE_DIR/stage-${stage}.done"
   [[ -f "$marker" ]] || fail "stage ${stage} has no marker"
+  if ! grep -q '^version=' "$marker"; then
+    fail "stage ${stage} marker records no version: this branch predates the
+configuration-aware markers added in v2.7. Dispatch this workflow against dev
+(or a newer branch) - the assertions below describe that behaviour."
+  fi
   grep -qx "version=${VERSION}" "$marker" || fail "stage ${stage} marker has the wrong version"
   grep -qx "user=${TARGET_USER}" "$marker" || fail "stage ${stage} marker has the wrong user"
   [[ -f "$STATE_DIR/stage-${stage}.config" ]] || fail "stage ${stage} has no config snapshot"
