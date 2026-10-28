@@ -185,15 +185,18 @@ lib/services/              System service setup, including DMS Greeter
 lib/extras/                Optional Flatpak, Distrobox, and Homebrew setup
 lib/finalize/              Cleanup and completion marker
 packages/                  Package list files, including conditional Intel Wi-Fi firmware
+kickstart/                 Fedora Minimal kickstart example and its safety validator
 tests/                     Shell test suite (run by CI)
+docs/                      Improvement backlog and the TUI plan
 ```
 
 ## Local development
 
-CI runs five gates on every push to `main`/`dev` and on pull requests. The same
-gates run twice: once on Ubuntu, and once inside a `fedora:latest` container so
-the dnf5/Fedora-specific paths are exercised. Run the same checks locally before
-committing:
+CI runs five gates on every push to `main`/`dev` and on pull requests. A second
+job re-runs the Fedora-relevant subset inside a `fedora:latest` container (bash
+syntax, kickstart validation, the test suite, and `--version`/`--help` smoke
+tests) so dnf5 and Fedora-specific paths get exercised too. Run the same checks
+locally before committing:
 
 ```bash
 # 1. Bash syntax

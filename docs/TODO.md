@@ -101,9 +101,11 @@ a target machine except the new `--version` flag.
       re-runs all five gates, refuses to publish when `VERSION` disagrees with
       the tag, builds a source archive + `SHA256SUMS`, and creates or refreshes
       the release with `gh` (annotated tag body as the notes).
-- [x] **5.3** Fedora CI job: the same gates inside `fedora:latest`, plus
-      `./install.sh --version` and `--help` smoke tests, so dnf5/Fedora paths
-      are exercised instead of only Ubuntu.
+- [x] **5.3** Fedora CI job: the Fedora-relevant gates inside `fedora:latest`
+      (bash syntax, kickstart validator, test suite, `--version`/`--help` smoke
+      tests), so dnf5/Fedora paths are exercised instead of only Ubuntu. Lint
+      and format stay on Ubuntu — Fedora ShellCheck/shfmt packaging is not
+      something a gate should depend on.
 - [x] **5.4** Correct the TUI plan: the replacement list is
       `packages/remove-replaced.packages`, not `packages/*.replaced`.
 - [x] **5.5** `dev` fast-forwarded to `main` after the v2.3 release, so the
@@ -122,6 +124,26 @@ a target machine except the new `--version` flag.
       that releases are tag-driven and CI runs on pull requests.
 - [ ] **6.5** Release assets beyond the source archive (e.g. a TUI binary from
       TUI-PLAN M4) once that work exists.
+
+### From the v2.4 repository review
+
+- [ ] **6.6** Fail *clearly* on non-Fedora hosts. `detect_environment` runs
+      `rpm -E %fedora` as its first command, so on a non-Fedora system the
+      script dies from `set -e` with an opaque error instead of "this only runs
+      on Fedora". Add an explicit distro guard before it.
+- [ ] **6.7** `services` overwrites `/etc/greetd/config.toml` unconditionally on
+      a `--force` re-run, with no backup and no "already configured" check. A
+      user who customised their greeter loses that file silently.
+- [ ] **6.8** `config` does `chown -R "$TARGET_USER:$TARGET_USER" ~/.config`,
+      which re-owns *everything* under the user's config directory, not just the
+      three directories Tophat creates. Narrow it to the paths it owns.
+- [ ] **6.9** Confirm `packages/intel-wifi.packages`: it lists only
+      `iwlwifi-dvm-firmware`, while the hardware check matches any Intel Wi-Fi.
+      Modern (AX2xx) parts use the mvm firmware; verify on the test laptop
+      whether this list is actually what supplies firmware.
+- [ ] **6.10** CI does not verify that `install.sh`'s header version matches
+      `VERSION` (the release workflow checks VERSION against the tag only), so
+      the two can drift unnoticed.
 
 ## Suggested commit order
 
