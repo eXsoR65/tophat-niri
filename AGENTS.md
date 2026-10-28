@@ -181,10 +181,12 @@ find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n && bash -n install.sh
 shellcheck -s bash -x -e SC1090,SC1091 install.sh $(find lib tests kickstart -name '*.sh' | sort)
 shfmt -d -i 2 -ci install.sh lib tests kickstart   # 2-space indent, case-indent
 kickstart/validate-kickstart.sh                    # rejects unsafe ks defaults
-for t in tests/*_test.sh; do "$t"; done             # 11 files: helpers, pkg, arg_parse,
-                                                     # stage_resolution, finalize_guard, and
-                                                     # one per stage (config, preflight, repos,
-                                                     # packaging, services, extras)
+for t in tests/*_test.sh; do "$t"; done             # 15 files: helpers, pkg, arg_parse,
+                                                     # stage_resolution, finalize_guard, locking,
+                                                     # lock_concurrency, marker_invalidation,
+                                                     # failure_recovery, and one per stage
+                                                     # (config, preflight, repos, packaging,
+                                                     # services, extras)
 ```
 
 The `shell` job also asserts that `VERSION` matches the version in the
@@ -220,6 +222,11 @@ mismatch, then publishes a source archive + `SHA256SUMS` and opens the release
 with the tag annotation as its body. The archive is reproducible: `git archive`
 to tar, `gzip -n`, and the workflow rebuilds it once to compare digests. Never
 create releases by hand.
+
+Run `tests/verify_all.sh` before pushing: it runs all five gates, the whole
+suite, and the lock concurrency stress on both backends (the races the lock
+guards against only appear when processes interleave, which a sequential suite
+cannot produce). `FAST=1` skips the stress rounds while iterating.
 
 **Run all five before considering a change done.** Style: shfmt `-i 2 -ci`,
 ShellCheck-clean (SC1090/SC1091 exempt for dynamic sourcing), shellcheck
