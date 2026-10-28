@@ -167,6 +167,29 @@ a target machine except the new `--version` flag.
       only one in the script and is cleared on the success path, so it is left as
       is and documented here rather than replaced.
 
+## Phase 8 — Fedora 45 readiness (verified 2026-10-27)
+
+Fedora 45 was still pre-GA when this was checked (no `releases/45` tree on the
+mirrors yet; only `development/45`), so everything below is verified against the
+branched tree and a real `fedora:45` container, not a released Fedora.
+
+- [x] **8.1** Code runs on Fedora 45: all 11 tests, the kickstart validator and
+      the `--version`/`--help` smoke tests pass inside `fedora:45`.
+- [x] **8.2** Every package Tophat installs from Fedora's own repositories
+      resolves on F45 (48 packages). `wget` was the only casualty — the package
+      name is gone in 44 and 45, so it is no longer installed.
+- [x] **8.3** Upstream repositories publish F45: RPM Fusion free/nonfree
+      `-release-45` RPMs exist, and niri/dms/danklinux/ghostty all have
+      `fedora-45` chroots (x86_64 and aarch64).
+- [x] **8.4** CI now runs the Fedora job as a matrix over `fedora:latest` and
+      `fedora:45` and enforces both checks above, so the next release is tested
+      before it ships rather than after.
+- [ ] **8.5** Re-run the Fedora job once F45 is actually GA: RPM Fusion swaps
+      its release RPMs from `development/45` to `releases/45` at GA, and that
+      path is the one real installs will use.
+- [ ] **8.6** Live validation of v2.5 (and F45) on the laptop, since v2.5
+      changes installer behaviour.
+
 ## Suggested commit order
 
 1. Phase 1 (single commit)

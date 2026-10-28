@@ -193,10 +193,11 @@ docs/                      Improvement backlog and the TUI plan
 ## Local development
 
 CI runs five gates on every push to `main`/`dev` and on pull requests. A second
-job re-runs the Fedora-relevant subset inside a `fedora:latest` container (bash
-syntax, kickstart validation, the test suite, and `--version`/`--help` smoke
-tests) so dnf5 and Fedora-specific paths get exercised too. Run the same checks
-locally before committing:
+job re-runs the Fedora-relevant subset inside a container matrix of
+`fedora:latest` and `fedora:45` (bash syntax, kickstart validation, the test
+suite, `--version`/`--help` smoke tests), and also checks on each release that
+every package we install still resolves and that RPM Fusion plus the COPRs we
+depend on publish a tree for it. Run the same checks locally before committing:
 
 ```bash
 # 1. Bash syntax
