@@ -51,6 +51,19 @@ release_run_lock
 acquire_run_lock || fail "lock leaked after the holder exited"
 release_run_lock
 
+# --- Registering another exit handler must not displace the lock's cleanup --
+# Homebrew used to install its own EXIT trap, which replaced the lock's and left
+# a stale directory behind after a successful run.
+marker="$tmp_dir/other-handler-ran"
+_other_handler() { : >"$marker"; }
+
+(
+  acquire_run_lock || exit 1
+  register_exit_handler _other_handler
+) || fail "subshell with two handlers failed"
+[[ ! -e "$SETUP_STATE_DIR/.lock.d" ]] || fail "lock survived the exit with two handlers registered"
+[[ -f "$marker" ]] || fail "the second exit handler did not run"
+
 # --- A stale lock is reported, never reclaimed automatically ----------------
 mkdir -p "$SETUP_STATE_DIR/.lock.d"
 printf '%s\n' 999999 >"$SETUP_STATE_DIR/.lock.d/pid"
@@ -72,5 +85,12 @@ grep -q 'remove it and retry' "$SETUP_LOG" || fail "no manual-cleanup guidance l
 
 rm -rf "$SETUP_STATE_DIR/.lock.d"
 [[ ! -e "$SETUP_STATE_DIR/.lock.d" ]] || fail "lock artifacts left behind"
+
+# --- Nothing may install a bare EXIT trap -----------------------------------
+# A `trap ... EXIT` anywhere else would replace the registry's dispatcher and
+# silently drop the lock cleanup (as Homebrew's did).
+offenders="$(grep -rn 'trap .*EXIT' lib/*.sh lib/*/*.sh 2>/dev/null |
+  grep -v 'helpers/run_logged.sh' || true)"
+[[ -z "$offenders" ]] || fail "bare EXIT trap found (use register_exit_handler): ${offenders}"
 
 echo "locking_test.sh: PASS"

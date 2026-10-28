@@ -130,6 +130,14 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
    acquiring; a stale directory is reported with the exact command to remove it
    (`rm -rf .lock.d`). Dry runs take no lock.
 
+10. **Exit cleanup is registered, never trapped**: anything needing cleanup uses
+    `register_exit_handler <function>` (`lib/helpers/run_logged.sh`), which
+    composes handlers behind one EXIT trap. A bare `trap ... EXIT` replaces the
+    dispatcher and silently drops every other handler — Homebrew's temp-file
+    cleanup did that and left the lock behind after a successful install.
+    `locking_test.sh` fails if a bare EXIT trap reappears outside
+    `run_logged.sh`.
+
 ## Known quirks / rough edges
 
 - `hardware_firmware.sh` re-detects Intel Wi-Fi only when

@@ -227,6 +227,29 @@ skip_stage() {
 }
 
 # -----------------------------------------------------------------------------
+# Composable exit handlers
+# -----------------------------------------------------------------------------
+# Anything that needs cleanup on exit must register here. Installing a bare
+# `trap ... EXIT` replaces every other handler: Homebrew's temp-file cleanup did
+# exactly that and silently dropped the lock's cleanup, leaving a stale lock
+# behind after a successful run.
+declare -a _EXIT_HANDLERS=()
+
+register_exit_handler() {
+  _EXIT_HANDLERS+=("$1")
+  trap '_run_exit_handlers' EXIT
+}
+
+_run_exit_handlers() {
+  local handler
+
+  ((${#_EXIT_HANDLERS[@]} > 0)) || return 0
+  for handler in "${_EXIT_HANDLERS[@]}"; do
+    "$handler" || true
+  done
+}
+
+# -----------------------------------------------------------------------------
 # Single-run lock
 # -----------------------------------------------------------------------------
 # mkdir is atomic and, unlike flock(1), always available on a Fedora Minimal
@@ -246,7 +269,7 @@ acquire_run_lock() {
   if mkdir "$lock_dir" 2>/dev/null; then
     printf '%s\n' "$$" >"$pid_file"
     RUN_LOCK_DIR="$lock_dir"
-    trap 'release_run_lock' EXIT
+    register_exit_handler release_run_lock
     return 0
   fi
 
