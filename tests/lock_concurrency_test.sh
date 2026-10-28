@@ -9,7 +9,7 @@
 #  the lock file) only appear when processes interleave.
 #
 #  Environment:
-#    WORKERS (default 8), ROUNDS (default 5), TOPHAT_LOCK_BACKEND (auto|flock|directory)
+#    WORKERS (default 8), ROUNDS (default 5)
 # =============================================================================
 set -euo pipefail
 
@@ -19,7 +19,6 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 WORKERS="${WORKERS:-8}"
 ROUNDS="${ROUNDS:-5}"
-backend="${TOPHAT_LOCK_BACKEND:-auto}"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -38,7 +37,6 @@ for round in $(seq 1 "$ROUNDS"); do
     (
       export SETUP_STATE_DIR="$state"
       export SETUP_LOG="$log"
-      export TOPHAT_LOCK_BACKEND="$backend"
       export DRY_RUN=false VERBOSE=false FORCE=false
       export CLR_RED='' CLR_GREEN='' CLR_YELLOW='' CLR_BLUE='' CLR_BOLD='' CLR_RESET=''
       # shellcheck source=lib/helpers/run_logged.sh
@@ -69,5 +67,4 @@ for round in $(seq 1 "$ROUNDS"); do
   [[ "$holders" -ge 1 ]] || fail "round ${round}: nobody acquired the lock"
 done
 
-# shellcheck disable=SC2031 # backend is only read inside the workers
-echo "lock_concurrency_test.sh: PASS (${backend}, ${ROUNDS} rounds x ${WORKERS} workers)"
+echo "lock_concurrency_test.sh: PASS (${ROUNDS} rounds x ${WORKERS} workers)"

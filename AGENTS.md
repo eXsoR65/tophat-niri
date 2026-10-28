@@ -119,19 +119,16 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
    skipped, with a message telling the user to run it themselves.
 8. **Logs/state**: live runs write `/var/log/tophat/runs/<timestamp>.log`
    (0640) with `latest.log` symlink, and state under `/var/lib/tophat/`.
-9. **One run at a time**: `acquire_run_lock` uses `flock` on
-   `$SETUP_STATE_DIR/.lock` (util-linux; systemd itself depends on it). The
-   kernel releases it when the holder exits, so there is no stale lock to
-   reclaim — and therefore no reclaim-versus-acquire race, which a
-   mkdir-plus-pid scheme cannot avoid without more machinery.
-   The lock file itself is never unlinked: it is only unlocked and its descriptor
-   closed. Removing it would let a second run lock the old inode while a third
-   creates a fresh `.lock` and locks that, which is two locks at once.
-   Where `flock` is genuinely absent it falls back to a directory lock
-   (`$SETUP_STATE_DIR/.lock.d` + pid) that is **never reclaimed automatically**:
-   a stale directory is reported with the path to remove. `TOPHAT_LOCK_BACKEND`
-   (`auto`/`flock`/`directory`) forces a backend so the fallback stays tested on
-   machines that have flock. Dry runs take no lock.
+9. **One run at a time**: `acquire_run_lock` takes `$SETUP_STATE_DIR/.lock.d`
+   with an atomic `mkdir` and records its pid. Exactly one mechanism, on
+   purpose: two backends cannot exclude each other — a run that starts before
+   util-linux is installed would hold a directory lock while a later run, now
+   seeing `flock`, takes a different lock file, and both proceed. `mkdir` is
+   atomic, needs nothing beyond the shell, and exists before any package is
+   installed.
+   The lock is never reclaimed automatically, because reclaiming races with
+   acquiring; a stale directory is reported with the exact command to remove it
+   (`rm -rf .lock.d`). Dry runs take no lock.
 
 ## Known quirks / rough edges
 
@@ -224,9 +221,9 @@ to tar, `gzip -n`, and the workflow rebuilds it once to compare digests. Never
 create releases by hand.
 
 Run `tests/verify_all.sh` before pushing: it runs all five gates, the whole
-suite, and the lock concurrency stress on both backends (the races the lock
-guards against only appear when processes interleave, which a sequential suite
-cannot produce). `FAST=1` skips the stress rounds while iterating.
+suite, and the lock concurrency stress (the races the lock guards against only
+appear when processes interleave, which a sequential suite cannot produce).
+`FAST=1` skips the stress rounds while iterating.
 
 **Run all five before considering a change done.** Style: shfmt `-i 2 -ci`,
 ShellCheck-clean (SC1090/SC1091 exempt for dynamic sourcing), shellcheck

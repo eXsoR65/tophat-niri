@@ -233,53 +233,16 @@ skip_stage() {
 # install. The pid file lets a lock left behind by a killed run be recognised as
 # stale instead of blocking the machine forever.
 acquire_run_lock() {
-  mkdir -p "$SETUP_STATE_DIR"
-
-  # The backend is auto-detected, but can be forced with TOPHAT_LOCK_BACKEND so
-  # the fallback stays testable on machines that do have flock.
-  local backend="${TOPHAT_LOCK_BACKEND:-auto}"
-
-  if [[ "$backend" == auto ]]; then
-    if command -v flock >/dev/null 2>&1; then
-      backend=flock
-    else
-      backend=directory
-    fi
-  fi
-
-  # flock is kernel-managed: the lock is released when the holder exits, so there
-  # is no stale lock to reclaim and no race between reclaiming and acquiring.
-  # util-linux provides it on Fedora (and it is what systemd itself depends on).
-  if [[ "$backend" == flock ]]; then
-    if ! command -v flock >/dev/null 2>&1; then
-      log_error "TOPHAT_LOCK_BACKEND=flock was requested but flock is not installed"
-      return 1
-    fi
-    RUN_LOCK_FILE="$SETUP_STATE_DIR/.lock"
-    exec 9>"$RUN_LOCK_FILE" || return 1
-    if flock -n 9; then
-      trap 'release_run_lock' EXIT
-      return 0
-    fi
-    exec 9>&-
-    RUN_LOCK_FILE=""
-    log_error "Another Tophat run is in progress (lock: $SETUP_STATE_DIR/.lock)"
-    log_error "Wait for it to finish; the lock is released automatically when it exits."
-    return 1
-  fi
-
-  # Fallback for systems without flock: a directory lock that is never reclaimed
-  # automatically. Auto-reclaiming invites the very race this guard exists to
-  # prevent, so a stale directory is reported for a human to remove instead.
-  if [[ "$backend" != directory ]]; then
-    log_warn "flock is unavailable; using a directory lock that needs manual cleanup if a run is killed"
-  else
-    log_warn "directory lock backend selected; it needs manual cleanup if a run is killed"
-  fi
   local lock_dir="$SETUP_STATE_DIR/.lock.d"
   local pid_file="$lock_dir/pid"
-  local existing_pid=""
 
+  mkdir -p "$SETUP_STATE_DIR"
+
+  # Exactly one mechanism, on purpose. Two backends cannot exclude each other:
+  # a run that starts before util-linux is installed would hold the directory
+  # lock while a later run, now seeing flock, takes a different lock file.
+  # mkdir is atomic, needs nothing beyond the shell, and is available before any
+  # package is installed.
   if mkdir "$lock_dir" 2>/dev/null; then
     printf '%s\n' "$$" >"$pid_file"
     RUN_LOCK_DIR="$lock_dir"
@@ -288,32 +251,26 @@ acquire_run_lock() {
   fi
 
   if [[ -r "$pid_file" ]]; then
+    local existing_pid
     existing_pid="$(<"$pid_file")"
     existing_pid="${existing_pid//[[:space:]]/}"
+    if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null; then
+      log_error "Another Tophat run is in progress (pid $existing_pid, lock: $lock_dir)"
+      log_error "Wait for it to finish."
+      return 1
+    fi
   fi
 
-  if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null; then
-    log_error "Another Tophat run is in progress (pid $existing_pid, lock: $lock_dir)"
-  else
-    log_error "A stale lock directory is in the way: $lock_dir (pid ${existing_pid:-unknown} is not running)"
-    log_error "Remove it and retry: rmdir '$lock_dir' after deleting '$pid_file' if present."
-  fi
+  # Deliberately never reclaimed automatically: reclaiming races with acquiring.
+  log_error "A lock directory is in the way and its owner is not running: $lock_dir"
+  log_error "If no Tophat run is active, remove it and retry: rm -rf '$lock_dir'"
   return 1
 }
 
 release_run_lock() {
-  if [[ -n "${RUN_LOCK_FILE:-}" ]]; then
-    flock -u 9 2>/dev/null || true
-    exec 9>&-
-    # The lock file is deliberately left in place. Unlinking it after unlocking
-    # lets a second run lock the old inode while a third creates a new .lock and
-    # locks that, giving two independent locks. Only the descriptor is released.
-    RUN_LOCK_FILE=""
-  fi
-  if [[ -n "${RUN_LOCK_DIR:-}" ]]; then
-    rm -rf -- "$RUN_LOCK_DIR"
-    RUN_LOCK_DIR=""
-  fi
+  [[ -n "${RUN_LOCK_DIR:-}" ]] || return 0
+  rm -rf -- "$RUN_LOCK_DIR"
+  RUN_LOCK_DIR=""
   return 0
 }
 

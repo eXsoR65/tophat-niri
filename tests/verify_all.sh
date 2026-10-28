@@ -55,8 +55,7 @@ else
   step '6/6 lock concurrency stress'
   # The races this guards against only appear when processes interleave, which
   # the sequential tests above cannot produce.
-  TOPHAT_LOCK_BACKEND=flock ROUNDS=5 WORKERS=12 tests/lock_concurrency_test.sh || fail 'flock concurrency'
-  TOPHAT_LOCK_BACKEND=directory ROUNDS=5 WORKERS=12 tests/lock_concurrency_test.sh || fail 'directory concurrency'
+  ROUNDS=5 WORKERS=12 tests/lock_concurrency_test.sh || fail 'lock concurrency'
 fi
 
 step 'version consistency'
