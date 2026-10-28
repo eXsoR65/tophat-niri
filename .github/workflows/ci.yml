@@ -108,8 +108,12 @@ jobs:
           fi
 
           cat "$log"
-          echo "::error::Fedora gate failed; tail is repeated as annotations below"
-          while IFS= read -r line; do
-            echo "::error::$line"
-          done < <(tail -40 "$log")
+          # GitHub surfaces at most ~10 annotations per step, so one line per
+          # echo hides the interesting part. Emit a single annotation with the
+          # tail and let %0A carry the newlines.
+          msg="$(tail -15 "$log" | while IFS= read -r line; do
+            line="${line//'%'/%25}"
+            printf '%s%%0A' "$line"
+          done)"
+          echo "::error::Fedora gate failed:%0A${msg}"
           exit 1
