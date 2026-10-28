@@ -45,9 +45,9 @@ for round in $(seq 1 "$ROUNDS"); do
       source "$ROOT/lib/helpers/run_logged.sh"
 
       if acquire_run_lock 2>/dev/null; then
-        printf 'start %s\n' "$worker" >>"$events"
+        printf 'start %s pid=%s at=%s\n' "$worker" "$$" "$(date +%s%3N)" >>"$events"
         sleep 0.05
-        printf 'end %s\n' "$worker" >>"$events"
+        printf 'end %s pid=%s at=%s\n' "$worker" "$$" "$(date +%s%3N)" >>"$events"
         release_run_lock
       fi
     ) >/dev/null &
@@ -71,6 +71,9 @@ for round in $(seq 1 "$ROUNDS"); do
       exit bad
     }
   ' "$events"; then
+    echo "--- events, round ${round} (${WORKERS} workers) ---" >&2
+    cat -n "$events" >&2
+    echo "--- end events ---" >&2
     fail "round ${round}: concurrent holders or a section that never closed"
   fi
 done
