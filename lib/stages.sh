@@ -34,6 +34,18 @@ export VERBOSE=false
 export ACCEPT_PACKAGE_REMOVALS=false
 export TARGET_USER="${TARGET_USER:-}"
 
+# Version reporting. install.sh exports TOPHAT_VERSION; when this file is
+# sourced directly (tests, tooling) fall back to SETUP_ROOT/VERSION.
+tophat_version() {
+  if [[ -n "${TOPHAT_VERSION:-}" ]]; then
+    printf '%s\n' "$TOPHAT_VERSION"
+  elif [[ -n "${SETUP_ROOT:-}" && -r "$SETUP_ROOT/VERSION" ]]; then
+    printf '%s\n' "$(<"$SETUP_ROOT/VERSION")"
+  else
+    printf 'unknown\n'
+  fi
+}
+
 usage() {
   cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
@@ -49,6 +61,7 @@ Options:
                      Allow Tophat to remove packages listed as replaced
   --force            Run even if setup marker indicates completion
   --verbose          Show command output inline (don't suppress)
+  --version          Show version and exit
   --help             Show this message
 
 Available stages:
@@ -93,6 +106,10 @@ parse_args() {
         shift
         ;;
       --help | -h) usage ;;
+      --version)
+        echo "Tophat $(tophat_version)"
+        exit 0
+        ;;
       *)
         echo "Unknown option: $1" >&2
         exit 1

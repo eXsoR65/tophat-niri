@@ -87,6 +87,42 @@ for t in tests/*_test.sh; do "$t"; done
       stub** — no spec exists for repo URL or linking strategy; an
       extras-style opt-in would be guesswork without requirements
 
+## Phase 5 — v2.4 hardening (process, not installer behavior)
+
+The goal of this phase is to make the project's *process* as solid as its code:
+v2.3 was merged and released by hand, and one release step needed credentials
+that only existed in a browser. Nothing here changes what the installer does on
+a target machine except the new `--version` flag.
+
+- [x] **5.1** `--version` flag: `tophat_version()` in `lib/stages.sh` (exported
+      `TOPHAT_VERSION` → `VERSION` → `unknown`), documented in `usage()`, the
+      README and `tests/arg_parse_test.sh`. Works without root.
+- [x] **5.2** Tag-triggered release workflow (`.github/workflows/release.yml`):
+      re-runs all five gates, refuses to publish when `VERSION` disagrees with
+      the tag, builds a source archive + `SHA256SUMS`, and creates or refreshes
+      the release with `gh` (annotated tag body as the notes).
+- [x] **5.3** Fedora CI job: the same gates inside `fedora:latest`, plus
+      `./install.sh --version` and `--help` smoke tests, so dnf5/Fedora paths
+      are exercised instead of only Ubuntu.
+- [x] **5.4** Correct the TUI plan: the replacement list is
+      `packages/remove-replaced.packages`, not `packages/*.replaced`.
+- [x] **5.5** `dev` fast-forwarded to `main` after the v2.3 release, so the
+      integration branch is no longer stale.
+
+## Phase 6 — Backlog (not started)
+
+- [ ] **6.1** Stage-level tests for the five stages that have none:
+      `preflight`, `repos`, `packaging`, `services`, `extras`. Only `config` and
+      `finalize` are covered today.
+- [ ] **6.2** Decide the fate of the `dotfiles.sh` stub (deferred from 4.4):
+      implement behind an opt-in file, or delete it.
+- [ ] **6.3** Community files: `CONTRIBUTING.md`, issue templates,
+      `SECURITY.md`. The repo has stars and a fork but no contribution path.
+- [ ] **6.4** Decide whether `dev` stays a long-lived integration branch now
+      that releases are tag-driven and CI runs on pull requests.
+- [ ] **6.5** Release assets beyond the source archive (e.g. a TUI binary from
+      TUI-PLAN M4) once that work exists.
+
 ## Suggested commit order
 
 1. Phase 1 (single commit)

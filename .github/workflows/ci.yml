@@ -44,3 +44,43 @@ jobs:
             echo "=== Running $test_file ==="
             "$test_file"
           done
+
+  # The Ubuntu job proves style; this one proves the engine runs on Fedora,
+  # where dnf5, /etc/greetd and the package names actually exist. shfmt is
+  # deliberately not installed here (not packaged reliably on Fedora).
+  fedora:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run gates on Fedora
+        run: |
+          docker run --rm -i --volume "$PWD:/src" --workdir /src \
+            fedora:latest bash -s <<'FEDORA_EOF'
+          set -euo pipefail
+
+          dnf install -y --setopt=install_weak_deps=False \
+            bash coreutils findutils gawk grep ShellCheck
+
+          echo '=== Bash syntax ==='
+          find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+          bash -n install.sh
+
+          echo '=== ShellCheck ==='
+          mapfile -t shell_files < <(find lib tests kickstart -type f -name '*.sh' | sort)
+          shellcheck -s bash -x -e SC1090,SC1091 install.sh "${shell_files[@]}"
+
+          echo '=== Kickstart validation ==='
+          kickstart/validate-kickstart.sh
+
+          echo '=== Tests ==='
+          for test_file in tests/*_test.sh; do
+            echo "--- $test_file ---"
+            "$test_file"
+          done
+
+          echo '=== CLI smoke tests ==='
+          ./install.sh --version
+          ./install.sh --help >/dev/null
+          FEDORA_EOF

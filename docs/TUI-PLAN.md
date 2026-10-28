@@ -76,7 +76,7 @@ block on input even if a prompt slips through.
 - [ ] **M2 — Stage graph UI.** Checklist with dependency visualization: select
   `config` → `preflight/repos/packaging` auto-check, labeled "dependency".
   Resolved plan preview from `lib/stages.sh`. Replacement-package preview for
-  the accept-removals toggle (reads `packages/*.replaced`).
+  the accept-removals toggle (reads `packages/remove-replaced.packages`).
 - [ ] **M3 — Structured events.** NDJSON protocol (above); per-stage status
   board (pending/running/done/failed/skipped) with durations; current-command
   line.

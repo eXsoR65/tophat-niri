@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  # Never publish a release that the five gates would reject. Also refuse a tag
+  # that disagrees with VERSION, so the asset, the tag and the version can't drift.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install shell tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck shfmt
+
+      - name: VERSION matches tag
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          file_version="$(<VERSION)"
+          if [[ "$tag_version" != "$file_version" ]]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match VERSION (${file_version})"
+            exit 1
+          fi
+          echo "Releasing v${file_version}"
+
+      - name: Bash syntax
+        run: |
+          find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+          bash -n install.sh
+
+      - name: ShellCheck
+        run: |
+          mapfile -t shell_files < <(find lib tests kickstart -type f -name '*.sh' | sort)
+          shellcheck -s bash -x -e SC1090,SC1091 install.sh "${shell_files[@]}"
+
+      - name: Formatting
+        run: |
+          shfmt -d -i 2 -ci install.sh lib tests kickstart
+
+      - name: Kickstart validation
+        run: |
+          kickstart/validate-kickstart.sh
+
+      - name: Tests
+        run: |
+          for test_file in tests/*_test.sh; do
+            echo "=== Running $test_file ==="
+            "$test_file"
+          done
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build source archive and checksums
+        run: |
+          name="tophat-${GITHUB_REF_NAME}"
+          git archive --format=tar.gz --prefix="${name}/" -o "${name}.tar.gz" HEAD
+          sha256sum "${name}.tar.gz" > SHA256SUMS
+          cat SHA256SUMS
+
+      # The annotated tag body is the release body: it is written once, at tag
+      # time, next to the code it describes.
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          archive="tophat-${tag}.tar.gz"
+          git tag -l --format='%(contents)' "$tag" > release-notes.md
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; refreshing assets only"
+            gh release upload "$tag" "$archive" SHA256SUMS --clobber
+          else
+            gh release create "$tag" \
+              --title "Tophat $tag" \
+              --notes-file release-notes.md \
+              --verify-tag \
+              "$archive" \
+              SHA256SUMS
+          fi

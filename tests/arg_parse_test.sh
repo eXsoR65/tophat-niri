@@ -70,4 +70,23 @@ grep -q -- "--select STAGES" <<<"$help_out" || fail "--help missing --select doc
 short_help_out="$(parse_args -h)"
 grep -q "Available stages:" <<<"$short_help_out" || fail "-h did not print usage"
 
+# --- --version reports the version and exits 0 --------------------------------
+expected_version="Tophat $(<"$ROOT/VERSION")"
+version_out="$(SETUP_ROOT="$ROOT" parse_args --version)" || fail "--version exited non-zero"
+[[ "$version_out" == "$expected_version" ]] ||
+  fail "--version from VERSION file: expected '$expected_version', got: $version_out"
+
+# install.sh exports TOPHAT_VERSION before sourcing; that must win when set
+export TOPHAT_VERSION="9.9.9-test"
+[[ "$(parse_args --version)" == "Tophat 9.9.9-test" ]] ||
+  fail "--version ignored an exported TOPHAT_VERSION"
+unset TOPHAT_VERSION
+
+# Missing both sources degrades to "unknown" instead of erroring
+[[ "$(parse_args --version)" == "Tophat unknown" ]] ||
+  fail "--version without TOPHAT_VERSION or SETUP_ROOT should report 'unknown'"
+
+# --- --version is documented in --help ----------------------------------------
+grep -q -- "--version" <<<"$help_out" || fail "--help missing --version docs"
+
 echo "arg_parse_test.sh: PASS"

@@ -70,6 +70,12 @@ Dry run:
 sudo ./install.sh --dry-run
 ```
 
+Show the version (does not require root, and does not touch the system):
+
+```bash
+./install.sh --version
+```
+
 Force re-run stages even if state markers exist:
 
 ```bash
@@ -184,8 +190,10 @@ tests/                     Shell test suite (run by CI)
 
 ## Local development
 
-CI runs five gates on every push to `main`/`dev` and on pull requests. Run the
-same checks locally before committing:
+CI runs five gates on every push to `main`/`dev` and on pull requests. The same
+gates run twice: once on Ubuntu, and once inside a `fedora:latest` container so
+the dnf5/Fedora-specific paths are exercised. Run the same checks locally before
+committing:
 
 ```bash
 # 1. Bash syntax
@@ -211,6 +219,19 @@ Tests are plain Bash scripts using PATH stubs for system commands (rpm, dnf,
 runuser), so they run safely on any machine without root or a real Fedora
 system. New test files matching `tests/*_test.sh` are picked up by CI
 automatically.
+
+## Releasing
+
+Releases are cut from a tag; nothing is published by hand:
+
+```bash
+git tag -a v2.4 -m "Tophat v2.4"    # VERSION must match the tag (v2.4 -> 2.4)
+git push origin v2.4
+```
+
+The `Release` workflow then re-runs all five gates, refuses to publish if
+`VERSION` and the tag disagree, builds a source archive plus `SHA256SUMS`, and
+creates the GitHub release using the annotated tag message as the release body.
 
 ## After install
 
