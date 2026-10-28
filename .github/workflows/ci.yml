@@ -46,30 +46,35 @@ jobs:
           done
 
   # The Ubuntu job proves style; this one proves the engine runs on Fedora,
-  # where dnf5, /etc/greetd and the package names actually exist. shfmt is
-  # deliberately not installed here (not packaged reliably on Fedora).
+  # where dnf5, /etc/greetd and the real package names exist. Deliberately
+  # narrow: ShellCheck and shfmt stay on Ubuntu (Fedora packaging of both is
+  # not something a gate should depend on), and no process substitution is
+  # used, so the container needs nothing beyond bash + findutils.
   fedora:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # A failure inside the container is otherwise invisible in the checks
+      # UI; re-emit the tail as an annotation so red runs explain themselves.
       - name: Run gates on Fedora
         run: |
-          docker run --rm -i --volume "$PWD:/src" --workdir /src \
-            fedora:latest bash -s <<'FEDORA_EOF'
+          set -uo pipefail
+          log="$(mktemp)"
+          if docker run --rm -i --volume "$PWD:/src" --workdir /src \
+            fedora:latest bash -s >"$log" 2>&1 <<'FEDORA_EOF'
           set -euo pipefail
 
-          dnf install -y --setopt=install_weak_deps=False \
-            bash coreutils findutils gawk grep ShellCheck
+          echo "OS:     $(grep PRETTY_NAME /etc/os-release)"
+          echo "bash:   $(bash --version | head -1)"
+          echo "dnf:    $(dnf --version | head -1)"
+
+          dnf install -y --setopt=install_weak_deps=False findutils gawk
 
           echo '=== Bash syntax ==='
           find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
           bash -n install.sh
-
-          echo '=== ShellCheck ==='
-          mapfile -t shell_files < <(find lib tests kickstart -type f -name '*.sh' | sort)
-          shellcheck -s bash -x -e SC1090,SC1091 install.sh "${shell_files[@]}"
 
           echo '=== Kickstart validation ==='
           kickstart/validate-kickstart.sh
@@ -84,3 +89,14 @@ jobs:
           ./install.sh --version
           ./install.sh --help >/dev/null
           FEDORA_EOF
+          then
+            cat "$log"
+            exit 0
+          fi
+
+          cat "$log"
+          echo "::error::Fedora gate failed; tail is repeated as annotations below"
+          while IFS= read -r line; do
+            echo "::error::$line"
+          done < <(tail -20 "$log")
+          exit 1
