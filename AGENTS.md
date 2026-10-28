@@ -14,9 +14,11 @@ first; the README covers user-facing usage.
 - **Validation:** v2.3 validated (2026-10-27) on the physical laptop with a
   real GPU — the accelerated-graphics path the retired Proxmox VM (llvmpipe,
   software rendering only) could never exercise. Last validated release: v2.3.
-  v2.4 was process-only (no installer change). **v2.5 changes installer
-  behaviour** — distro guard, greeter config backup, narrower `chown` — so it
-  needs a live run before it counts as validated.
+  v2.4 was process-only (no installer change). **v2.5–v2.7 change installer
+  behaviour** — distro guard, greeter config backup, narrower `chown` (2.5);
+  opt-in autoremove, stricter `--select`, non-bypassable finalize guard (2.6);
+  configuration-aware markers, single-run lock, composable exit cleanup (2.7) —
+  so the current code needs a live run before it counts as validated.
 - **Upstream dependencies:** Fedora (dnf5), COPRs `yalter/niri`,
   `avengemedia/dms` (auto-pulls `avengemedia/danklinux`), `scottames/ghostty`,
   RPM Fusion free/nonfree, official Brave repo, greetd.
@@ -171,10 +173,11 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
 - **TUI** (OpenTUI + `@opentui/react`, Bun): plan lives in
   `docs/TUI-PLAN.md`. In-repo `tui/`, `./tophat` launcher with Bash fallback,
   milestones M1–M5. Not yet implemented — Bash remains the only engine.
-- **v2.4 hardening** and the **v2.5 review fixes** are done: every stage now
-  has at least one test, and the review findings are closed or explicitly
-  deferred. What remains (the dotfiles decision, community files, the `dev`
-  branch question) is tracked in `docs/TODO.md` under Phase 6.
+- **v2.4–v2.7 hardening** is done: every stage has at least one test and the
+  review findings are closed or explicitly deferred. What remains — the dotfiles
+  decision, community files, the `dev` branch question (Phase 6), the Fedora 45
+  GA re-check (8.5), live hardware validation (8.6/10.9) — is tracked in
+  `docs/TODO.md`.
 
 ## Validation & CI
 
