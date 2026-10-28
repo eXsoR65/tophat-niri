@@ -1,6 +1,6 @@
 # TODO — Tophat Improvement Plan
 
-Derived from the codebase review (see `AGENT.md`). Items are grouped into
+Derived from the codebase review (see `AGENTS.md`). Items are grouped into
 phases; each phase should land with all CI gates green:
 
 ```bash
