@@ -223,8 +223,13 @@ not new features.
 - [x] **10.1** Configuration-aware markers: each marker stores version, target
       user and a snapshot of the package lists; any change re-runs that stage
       with a logged reason (`tests/marker_invalidation_test.sh`).
-- [x] **10.2** Concurrent runs: atomic `mkdir` lock with a pid file and stale
-      lock breaking; dry runs are exempt (`tests/locking_test.sh`).
+- [x] **10.2** Concurrent runs: one lock mechanism — an atomic `mkdir`
+      directory with a pid file — because two backends cannot exclude each
+      other. Deliberately never reclaimed automatically (reclaiming races with
+      acquiring); a stale directory is reported with the command to clear it.
+      Proven under real contention, not just sequential calls
+      (`tests/locking_test.sh`, `tests/lock_concurrency_test.sh`). Dry runs are
+      exempt.
 - [x] **10.3** Interruption and failure tests: a failed or interrupted stage
       never writes a marker, so a rerun resumes instead of skipping
       (`tests/failure_recovery_test.sh`).
@@ -244,6 +249,17 @@ not new features.
 - [ ] **10.8c** Run the VM scenarios in `docs/INTEGRATION-TESTING.md` (fresh
       install, rerun, interrupted run, upgrade) on a Fedora Minimal VM.
 - [ ] **10.9** Run the real-GPU checklist on the laptop (also covers 8.6).
+
+### From the Codex review rounds on PR #4 / #6
+
+- [x] **10.10** `proxmox-test.sh` refuses to stop or destroy a VM that existed
+      before the run (a caller-supplied VMID could otherwise delete a machine
+      and its volumes).
+- [x] **10.11** `remove-replaced.packages` is part of the marker snapshot, so a
+      changed removal list invalidates packaging instead of being ignored.
+- [x] **10.12** Exit cleanup is composed through `register_exit_handler`; a bare
+      `trap ... EXIT` elsewhere (Homebrew's had one) would silently drop the
+      lock's cleanup, and the test suite now fails if one reappears.
 
 ## Suggested commit order
 
