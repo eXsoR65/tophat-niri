@@ -89,7 +89,7 @@ rm -rf "$SETUP_STATE_DIR/.lock.d"
 # --- Nothing may install a bare EXIT trap -----------------------------------
 # A `trap ... EXIT` anywhere else would replace the registry's dispatcher and
 # silently drop the lock cleanup (as Homebrew's did).
-offenders="$(grep -rn 'trap .*EXIT' lib/*.sh lib/*/*.sh 2>/dev/null |
+offenders="$(grep -rn --include='*.sh' 'trap .*EXIT' "$ROOT/lib" 2>/dev/null |
   grep -v 'helpers/run_logged.sh' || true)"
 [[ -z "$offenders" ]] || fail "bare EXIT trap found (use register_exit_handler): ${offenders}"
 
