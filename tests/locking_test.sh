@@ -53,8 +53,14 @@ run_backend() { # $1 = flock | directory
 
     # --- Releasing lets the next run in --------------------------------------
     release_run_lock
-    [[ ! -e "$SETUP_STATE_DIR/.lock" && ! -e "$SETUP_STATE_DIR/.lock.d" ]] ||
-      fail "${backend}: lock left behind after release"
+    if [[ "$backend" == flock ]]; then
+      # The lock file must stay: unlinking it would let a second run lock the old
+      # inode while a third locks a fresh .lock.
+      [[ -f "$SETUP_STATE_DIR/.lock" ]] ||
+        fail "${backend}: lock file was unlinked after release"
+    else
+      [[ ! -e "$SETUP_STATE_DIR/.lock.d" ]] || fail "${backend}: lock directory left behind"
+    fi
     acquire_run_lock || fail "${backend}: could not re-acquire after release"
     release_run_lock
 
@@ -80,7 +86,7 @@ run_backend() { # $1 = flock | directory
     fi
 
     rm -rf "$SETUP_STATE_DIR/.lock.d"
-    [[ ! -e "$SETUP_STATE_DIR/.lock" ]] || fail "${backend}: lock file left behind"
+    [[ ! -e "$SETUP_STATE_DIR/.lock.d" ]] || fail "${backend}: lock directory left behind"
   )
 }
 

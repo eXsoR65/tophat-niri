@@ -124,6 +124,9 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
    kernel releases it when the holder exits, so there is no stale lock to
    reclaim — and therefore no reclaim-versus-acquire race, which a
    mkdir-plus-pid scheme cannot avoid without more machinery.
+   The lock file itself is never unlinked: it is only unlocked and its descriptor
+   closed. Removing it would let a second run lock the old inode while a third
+   creates a fresh `.lock` and locks that, which is two locks at once.
    Where `flock` is genuinely absent it falls back to a directory lock
    (`$SETUP_STATE_DIR/.lock.d` + pid) that is **never reclaimed automatically**:
    a stale directory is reported with the path to remove. `TOPHAT_LOCK_BACKEND`

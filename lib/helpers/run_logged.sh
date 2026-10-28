@@ -305,7 +305,9 @@ release_run_lock() {
   if [[ -n "${RUN_LOCK_FILE:-}" ]]; then
     flock -u 9 2>/dev/null || true
     exec 9>&-
-    rm -f -- "$RUN_LOCK_FILE"
+    # The lock file is deliberately left in place. Unlinking it after unlocking
+    # lets a second run lock the old inode while a third creates a new .lock and
+    # locks that, giving two independent locks. Only the descriptor is released.
     RUN_LOCK_FILE=""
   fi
   if [[ -n "${RUN_LOCK_DIR:-}" ]]; then
