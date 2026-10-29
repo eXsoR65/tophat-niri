@@ -21,7 +21,10 @@ tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
 WORKERS="${WORKERS:-8}"
-HOLD_TIMEOUT="${HOLD_TIMEOUT:-5}"
+# Safety net only: if a runner is so loaded that the contenders cannot finish in
+# this long, the holder reports a *harness* timeout. It must never release the
+# lock on its own, or a genuinely slow run would look like a lock failure.
+HOLD_TIMEOUT="${HOLD_TIMEOUT:-30}"
 
 export SETUP_STATE_DIR="$tmp_dir/state"
 export SETUP_LOG="$tmp_dir/log"
@@ -50,6 +53,7 @@ wait_for() { # $1 = file, $2 = what we are waiting for
 released="$tmp_dir/released"
 stop="$tmp_dir/stop"
 holding="$tmp_dir/holding"
+holder_timeout="$tmp_dir/holder-timed-out"
 
 # --- A holder takes the lock and stays inside -------------------------------
 (
@@ -57,8 +61,17 @@ holding="$tmp_dir/holding"
   source "$ROOT/lib/helpers/run_logged.sh"
   acquire_run_lock || exit 1
   : >"$holding"
-  local_deadline=$((SECONDS + HOLD_TIMEOUT))
-  while [[ ! -e $stop ]] && ((SECONDS < local_deadline)); do sleep 0.05; done
+
+  deadline=$((SECONDS + HOLD_TIMEOUT))
+  while [[ ! -e $stop ]]; do
+    if ((SECONDS >= deadline)); then
+      # Do NOT release: that would turn a slow harness into a fake lock failure.
+      : >"$holder_timeout"
+      exit 1
+    fi
+    sleep 0.05
+  done
+
   release_run_lock
   : >"$released"
 ) &
@@ -95,7 +108,12 @@ grep -q 'Another Tophat run is in progress' "$SETUP_LOG" || fail "refusal not ex
 
 # --- Releasing frees it ------------------------------------------------------
 : >"$stop"
-wait "$holder" || fail "holder exited non-zero"
+if ! wait "$holder"; then
+  if [[ -e "$holder_timeout" ]]; then
+    fail "harness timeout: the holder waited ${HOLD_TIMEOUT}s for the contenders and gave up; raise HOLD_TIMEOUT (this is a slow harness, not a lock failure)"
+  fi
+  fail "holder exited non-zero"
+fi
 wait_for "$released" "the holder to release"
 [[ ! -e "$SETUP_STATE_DIR/.lock.d" ]] || fail "lock directory left behind after release"
 
