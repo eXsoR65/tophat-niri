@@ -50,12 +50,33 @@ jobs:
         run: |
           kickstart/validate-kickstart.sh
 
+      # Capture the suite so a failure names the test and shows its tail as an
+      # annotation: this job's log is not reachable from tooling otherwise.
       - name: Tests
         run: |
+          log="$(mktemp)"
+          : >"$log"
           for test_file in tests/*_test.sh; do
-            echo "=== Running $test_file ==="
-            "$test_file"
+            {
+              echo "=== Running $test_file ==="
+              "$test_file"
+            } >>"$log" 2>&1 || {
+              echo "FAILED: $test_file" >>"$log"
+              break
+            }
           done
+
+          tail -40 "$log"
+          if ! grep -q '^FAILED: ' "$log"; then
+            exit 0
+          fi
+
+          msg="$(tail -25 "$log" | while IFS= read -r line; do
+            line="${line//'%'/%25}"
+            printf '%s%%0A' "$line"
+          done)"
+          echo "::error::test suite failed:%0A${msg}"
+          exit 1
 
   # The Ubuntu job proves style; this one proves the engine runs on Fedora,
   # where dnf5, /etc/greetd and the real package names exist. Deliberately

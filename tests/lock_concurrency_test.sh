@@ -3,12 +3,13 @@
 #  lock_concurrency_test.sh — the lock actually serialises concurrent runs
 #
 #  Starts WORKERS processes that race for the lock. Inside the critical section
-#  each one increments a counter and checks it, so a second concurrent holder is
-#  detected exactly rather than inferred from timestamps (timestamps tie at
-#  millisecond granularity and made this test flaky on loaded runners).
+#  each one appends "start" then "end" to a shared events file.
 #
-#  The counter is only read and written while holding the lock, so it is itself
-#  serialised: if two runs ever hold the lock at once, the second sees depth 2.
+#  Because those appends happen only while holding the lock, the file order *is*
+#  the order of critical sections. A working lock therefore leaves exactly
+#  start,end,start,end... - no clocks, no shared counter, nothing that depends on
+#  scheduling. Two runs inside at once (or a section that never closes) shows up
+#  as two consecutive starts or a missing end.
 #
 #  Environment: WORKERS (default 8), ROUNDS (default 5)
 # =============================================================================
@@ -28,12 +29,10 @@ fail() {
 
 for round in $(seq 1 "$ROUNDS"); do
   state="$tmp_dir/state-$round"
-  counter="$tmp_dir/depth-$round"
-  violations="$tmp_dir/violations-$round"
+  events="$tmp_dir/events-$round"
   log="$tmp_dir/log-$round"
   mkdir -p "$state"
-  printf '0' >"$counter"
-  : >"$violations"
+  : >"$events"
   : >"$log"
 
   for worker in $(seq 1 "$WORKERS"); do
@@ -46,26 +45,37 @@ for round in $(seq 1 "$ROUNDS"); do
       source "$ROOT/lib/helpers/run_logged.sh"
 
       if acquire_run_lock 2>/dev/null; then
-        depth="$(<"$counter")"
-        depth=$((depth + 1))
-        printf '%s' "$depth" >"$counter"
-        if ((depth > 1)); then
-          printf 'worker %s entered while depth was %s\n' "$worker" "$depth" >>"$violations"
-        fi
+        printf 'start %s pid=%s at=%s\n' "$worker" "$$" "$(date +%s%3N)" >>"$events"
         sleep 0.05
-        depth="$(<"$counter")"
-        printf '%s' "$((depth - 1))" >"$counter"
+        printf 'end %s pid=%s at=%s\n' "$worker" "$$" "$(date +%s%3N)" >>"$events"
         release_run_lock
       fi
     ) >/dev/null &
   done
   wait
 
-  if [[ -s "$violations" ]]; then
-    cat "$violations" >&2
-    fail "round ${round}: two runs held the lock at the same time"
+  holders="$(grep -c '^start' "$events" || true)"
+  [[ "$holders" -ge 1 ]] || fail "round ${round}: nobody acquired the lock"
+
+  if ! awk '
+    $1 == "start" {
+      if (inside) { printf "overlap: second start while still inside (%s)\n", $0; bad = 1 }
+      inside = 1
+    }
+    $1 == "end" {
+      if (!inside) { printf "unbalanced end without start (%s)\n", $0; bad = 1 }
+      inside = 0
+    }
+    END {
+      if (inside) { print "unbalanced: critical section never closed"; bad = 1 }
+      exit bad
+    }
+  ' "$events"; then
+    echo "--- events, round ${round} (${WORKERS} workers) ---" >&2
+    cat -n "$events" >&2
+    echo "--- end events ---" >&2
+    fail "round ${round}: concurrent holders or a section that never closed"
   fi
-  [[ "$(<"$counter")" == 0 ]] || fail "round ${round}: counter did not return to 0"
 done
 
 echo "lock_concurrency_test.sh: PASS (${ROUNDS} rounds x ${WORKERS} workers)"
