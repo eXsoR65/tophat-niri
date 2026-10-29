@@ -2,10 +2,10 @@
 # =============================================================================
 #  action_pins_test.sh — the pin check must see every valid spelling
 #
-#  tests/check_action_pins.sh has now been wrong twice in the same way: it only
-#  recognised the spelling that existed when it was written (indented `uses:`,
-#  then only double quotes). Each spelling YAML allows is a separate fixture
-#  here, so adding one is a test change rather than a guess.
+#  tests/check_action_pins.sh has been wrong three times in the same way: it only
+#  recognised what existed when it was written (indented `uses:`, then only double
+#  quotes, then only .yml files). Every spelling YAML or GitHub Actions allows is
+#  a fixture here, so adding one is a test change rather than a guess.
 # =============================================================================
 set -euo pipefail
 
@@ -21,19 +21,19 @@ fail() {
 
 SHA="0123456789abcdef0123456789abcdef01234567"
 
-# expect_pass <name> <workflow body>
+# expect_pass <name> <filename> <body>
 expect_pass() {
-  local name="$1" body="$2" dir="$tmp_dir/pass-$1"
+  local name="$1" filename="$2" body="$3" dir="$tmp_dir/pass-$1"
   mkdir -p "$dir/.github/workflows"
-  printf '%s\n' "$body" >"$dir/.github/workflows/w.yml"
+  printf '%s\n' "$body" >"$dir/.github/workflows/$filename"
   "$CHECK" "$dir" >/dev/null 2>&1 || fail "expected PASS for ${name}"
 }
 
-# expect_fail <name> <workflow body> <expected fragment>
+# expect_fail <name> <filename> <body> <expected fragment>
 expect_fail() {
-  local name="$1" body="$2" want="$3" dir="$tmp_dir/fail-$1" out
+  local name="$1" filename="$2" body="$3" want="$4" dir="$tmp_dir/fail-$1" out
   mkdir -p "$dir/.github/workflows"
-  printf '%s\n' "$body" >"$dir/.github/workflows/w.yml"
+  printf '%s\n' "$body" >"$dir/.github/workflows/$filename"
   if out="$("$CHECK" "$dir" 2>&1)"; then
     fail "expected FAIL for ${name}, got PASS"
   fi
@@ -41,59 +41,115 @@ expect_fail() {
 }
 
 # --- pinned in each spelling -------------------------------------------------
-expect_pass named "jobs:
+expect_pass named w.yml "jobs:
   a:
     steps:
       - name: Checkout
         uses: actions/checkout@${SHA} # v7.0.1"
 
-expect_pass unnamed "jobs:
+expect_pass unnamed w.yml "jobs:
   a:
     steps:
       - uses: actions/checkout@${SHA}"
 
-expect_pass single-quoted "jobs:
+expect_pass single-quoted w.yml "jobs:
   a:
     steps:
       - uses: 'actions/checkout@${SHA}'"
 
-expect_pass double-quoted "jobs:
+expect_pass double-quoted w.yml "jobs:
   a:
     steps:
       - uses: \"actions/checkout@${SHA}\""
 
+# --- the other legal workflow extension --------------------------------------
+expect_pass yaml-extension workflow.yaml "jobs:
+  a:
+    steps:
+      - uses: actions/checkout@${SHA}"
+
+# --- things that are not action references -----------------------------------
+expect_pass local-action w.yml "jobs:
+  a:
+    steps:
+      - uses: ./.github/actions/setup"
+
+expect_pass container-image-digest w.yml "jobs:
+  a:
+    steps:
+      - uses: docker://alpine@sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+
+expect_fail container-image-tag w.yml "jobs:
+  a:
+    steps:
+      - uses: docker://alpine:3.20" "docker://alpine:3.20"
+
+# A YAML alias hides the ref from any shape-matching extractor, so it must fail
+# rather than be skipped.
+expect_fail yaml-alias w.yml "anchors:
+  checkout: &checkout actions/checkout@v7
+jobs:
+  a:
+    steps:
+      - uses: *checkout" "*checkout"
+
+# A run block whose text contains "uses:" must not be read as a reference.
+expect_pass uses-in-run-block w.yml "jobs:
+  a:
+    steps:
+      - name: Explain
+        run: |
+          echo 'uses: actions/checkout@v7'
+          echo done"
+
+# ...even when the block is nested and uses the folded style.
+expect_pass uses-in-folded-block w.yml "jobs:
+  a:
+    steps:
+      - name: Explain
+        shell: bash
+        run: >
+          cat <<'EOF'
+          uses: actions/checkout@v7
+          EOF"
+
 # --- unpinned in each spelling ----------------------------------------------
-UNPINNED="jobs:
+expect_fail named w.yml "jobs:
   a:
     steps:
       - name: Checkout
-        uses: actions/checkout@v7"
-expect_fail named "$UNPINNED" "actions/checkout@v7"
+        uses: actions/checkout@v7" "actions/checkout@v7"
 
-expect_fail unnamed "jobs:
+expect_fail unnamed w.yml "jobs:
   a:
     steps:
       - uses: actions/checkout@v7" "actions/checkout@v7"
 
-expect_fail single-quoted "jobs:
+expect_fail single-quoted w.yml "jobs:
   a:
     steps:
       - uses: 'actions/checkout@v7'" "actions/checkout@v7"
 
-expect_fail double-quoted "jobs:
+expect_fail double-quoted w.yml "jobs:
   a:
     steps:
       - uses: \"actions/checkout@v7\"" "actions/checkout@v7"
 
-expect_fail branch-ref "jobs:
+expect_fail branch-ref w.yml "jobs:
   a:
     steps:
       - uses: actions/checkout@main" "actions/checkout@main"
 
-# --- a local composite action has no ref to pin ------------------------------
-expect_pass local-action "jobs:
+expect_fail yaml-extension workflow.yaml "jobs:
   a:
     steps:
-      - uses: ./.github/actions/setup"
+      - uses: actions/checkout@v7" "actions/checkout@v7"
+
+# --- a misconfigured root is an error, not a silent pass ---------------------
+empty="$tmp_dir/empty"
+mkdir -p "$empty/.github/workflows"
+if "$CHECK" "$empty" >/dev/null 2>&1; then
+  fail "expected FAIL when there are no workflow files"
+fi
 
 echo "action_pins_test.sh: PASS"

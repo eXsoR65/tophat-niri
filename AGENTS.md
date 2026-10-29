@@ -140,7 +140,8 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
     dispatcher and silently drops every other handler — Homebrew's temp-file
     cleanup did that and left the lock behind after a successful install.
     `locking_test.sh` fails if a bare EXIT trap reappears outside
-    `run_logged.sh`.
+    `run_logged.sh` — including the `trap ... 0` spelling, and including
+    `install.sh`.
 
 ## Known quirks / rough edges
 
@@ -189,6 +190,7 @@ order:
 ```bash
 find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n && bash -n install.sh
 shellcheck -s bash -x -e SC1090,SC1091 install.sh $(find lib tests kickstart -name '*.sh' | sort)
+tests/check_action_pins.sh                         # every action pinned to a SHA
 shfmt -d -i 2 -ci install.sh lib tests kickstart   # 2-space indent, case-indent
 kickstart/validate-kickstart.sh                    # rejects unsafe ks defaults
 for t in tests/*_test.sh; do "$t"; done             # 17 files: helpers, pkg, arg_parse,
@@ -208,7 +210,7 @@ a `./install.sh --dry-run` against a throwaway user, which is the closest CI can
 get to a real install without a VM. `docs/INTEGRATION-TESTING.md` records what
 still needs a VM or a real GPU, and the manual procedure for both.
 
-Two jobs: `shell` on `ubuntu-latest` runs all five gates above. `fedora` runs
+Two jobs: `shell` on `ubuntu-latest` runs every gate above. `fedora` runs
 inside a container matrix of `fedora:latest` (the current release) and
 `fedora:45` (the next one), covering only what genuinely needs Fedora — bash
 syntax, the kickstart validator, the test suite, `./install.sh --version` /
@@ -231,8 +233,8 @@ Actions are pinned to reviewed commit SHAs with the version in a trailing
 comment (a tag can be moved; a SHA cannot). Dependabot raises the PRs that bump
 them, so the pin stays current instead of fossilising. `tests/check_action_pins.sh`
 enforces it in CI and in `verify_all`; `tests/action_pins_test.sh` holds a
-fixture for every spelling YAML allows, because that check has twice been blind
-to a form nobody wrote when it was added.
+fixture for every spelling YAML allows, because that check has repeatedly been
+blind to a form nobody wrote when it was added.
 
 Releases: push an annotated tag `v<version>` matching `VERSION`;
 `.github/workflows/release.yml` re-runs the gates, fails on a VERSION/tag
@@ -241,12 +243,10 @@ with the tag annotation as its body. The archive is reproducible: `git archive`
 to tar, `gzip -n`, and the workflow rebuilds it once to compare digests. Never
 create releases by hand.
 
-Run `tests/verify_all.sh` before pushing: it runs all five gates, the whole
-suite, and the lock concurrency stress (the races the lock guards against only
-appear when processes interleave, which a sequential suite cannot produce).
-`FAST=1` skips the stress rounds while iterating.
+`FAST=1` skips the lock stress while iterating.
 
-**Run all five before considering a change done.** Style: shfmt `-i 2 -ci`,
+**Run `tests/verify_all.sh` before considering a change done** — it runs every
+gate above locally, plus the suite and the lock stress. Style: shfmt `-i 2 -ci`,
 ShellCheck-clean (SC1090/SC1091 exempt for dynamic sourcing), shellcheck
 `source=` directives used where paths are static.
 

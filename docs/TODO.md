@@ -98,7 +98,7 @@ a target machine except the new `--version` flag.
       `TOPHAT_VERSION` → `VERSION` → `unknown`), documented in `usage()`, the
       README and `tests/arg_parse_test.sh`. Works without root.
 - [x] **5.2** Tag-triggered release workflow (`.github/workflows/release.yml`):
-      re-runs all five gates, refuses to publish when `VERSION` disagrees with
+      re-runs every gate, refuses to publish when `VERSION` disagrees with
       the tag, builds a source archive + `SHA256SUMS`, and creates or refreshes
       the release with `gh` (annotated tag body as the notes).
 - [x] **5.3** Fedora CI job: the Fedora-relevant gates inside `fedora:latest`
