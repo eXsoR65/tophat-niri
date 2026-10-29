@@ -5,20 +5,22 @@ first; the README covers user-facing usage.
 
 ## Project identity
 
-- **Name:** Tophat (version in `VERSION`, currently 2.7; last release: v2.4)
+- **Name:** Tophat (version in `VERSION`, currently 2.7; last release: v2.7)
 - **Purpose:** Opinionated installer that transforms a **Fedora Minimal**
   install into a **niri + DankMaterialShell (DMS)** workstation. Inspired by
   Omarchy's staged flow.
 - **Language:** 100% Bash (`set -euo pipefail` everywhere). No build system.
 - **License:** GPLv3.
-- **Validation:** v2.3 validated (2026-10-27) on the physical laptop with a
-  real GPU — the accelerated-graphics path the retired Proxmox VM (llvmpipe,
-  software rendering only) could never exercise. Last validated release: v2.3.
-  v2.4 was process-only (no installer change). **v2.5–v2.7 change installer
-  behaviour** — distro guard, greeter config backup, narrower `chown` (2.5);
-  opt-in autoremove, stricter `--select`, non-bypassable finalize guard (2.6);
-  configuration-aware markers, single-run lock, composable exit cleanup (2.7) —
-  so the current code needs a live run before it counts as validated.
+- **Validation:** v2.7 validated end to end (2026-10-29) on the physical laptop
+  with a real GPU — the accelerated-graphics path the retired Proxmox VM
+  (llvmpipe, software rendering only) could never exercise. The run covered a
+  full install from Fedora Minimal, an idempotent rerun that skipped every
+  stage, clean lock acquire/release on both, and after rebooting a working
+  graphical session: greetd login, niri, DankMaterialShell, installed
+  applications, Wi-Fi and audio. v2.3 was the previous hardware-validated
+  release; v2.4 was process-only, and v2.5–v2.7 shipped together in this run.
+  Re-validate on hardware when a change touches installation, the greeter or the
+  session path.
 - **Upstream dependencies:** Fedora (dnf5), COPRs `yalter/niri`,
   `avengemedia/dms` (auto-pulls `avengemedia/danklinux`), `scottames/ghostty`,
   RPM Fusion free/nonfree, official Brave repo, greetd.
@@ -174,9 +176,9 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
   `docs/TUI-PLAN.md`. In-repo `tui/`, `./tophat` launcher with Bash fallback,
   milestones M1–M5. Not yet implemented — Bash remains the only engine.
 - **v2.4–v2.7 hardening** is done: every stage has at least one test and the
-  review findings are closed or explicitly deferred. What remains — the dotfiles
-  decision, community files, the `dev` branch question (Phase 6), the Fedora 45
-  GA re-check (8.5), live hardware validation (8.6/10.9) — is tracked in
+  review findings are closed or explicitly deferred, and v2.7 is hardware
+  validated. What remains — the dotfiles decision, community files, the `dev`
+  branch question (Phase 6) and the Fedora 45 GA re-check (8.5) — is tracked in
   `docs/TODO.md`.
 
 ## Validation & CI
@@ -189,12 +191,12 @@ find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n && bash -n install.sh
 shellcheck -s bash -x -e SC1090,SC1091 install.sh $(find lib tests kickstart -name '*.sh' | sort)
 shfmt -d -i 2 -ci install.sh lib tests kickstart   # 2-space indent, case-indent
 kickstart/validate-kickstart.sh                    # rejects unsafe ks defaults
-for t in tests/*_test.sh; do "$t"; done             # 15 files: helpers, pkg, arg_parse,
+for t in tests/*_test.sh; do "$t"; done             # 16 files: helpers, pkg, arg_parse,
                                                      # stage_resolution, finalize_guard, locking,
                                                      # lock_concurrency, marker_invalidation,
-                                                     # failure_recovery, and one per stage
-                                                     # (config, preflight, repos, packaging,
-                                                     # services, extras)
+                                                     # failure_recovery, exit_handler_scope,
+                                                     # and one per stage (config, preflight,
+                                                     # repos, packaging, services, extras)
 ```
 
 The `shell` job also asserts that `VERSION` matches the version in the
