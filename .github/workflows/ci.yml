@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install shell tools
         run: |
@@ -41,6 +41,21 @@ jobs:
         run: |
           mapfile -t shell_files < <(find lib tests kickstart -type f -name '*.sh' -print | sort)
           shellcheck -s bash -x -e SC1090,SC1091 install.sh "${shell_files[@]}"
+
+      # A tag can be moved; a commit SHA cannot. Dependabot bumps the pin.
+      - name: Workflow actions pinned
+        run: |
+          unpinned="$(awk '
+            /^[[:space:]]*uses:[[:space:]]*[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]+@/ {
+              line = $0
+              sub(/^[[:space:]]*uses:[[:space:]]*/, "", line)
+              split(line, parts, /[[:space:]]/)
+              print parts[1]
+            }' .github/workflows/*.yml | grep -vE '@[0-9a-f]{40}$' || true)"
+          if [[ -n "$unpinned" ]]; then
+            echo "::error::actions must be pinned to a 40-character commit SHA: ${unpinned}"
+            exit 1
+          fi
 
       - name: Formatting
         run: |
@@ -94,7 +109,7 @@ jobs:
         container: [fedora:latest, fedora:45]
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Pull image (${{ matrix.container }})
         run: docker pull --quiet ${{ matrix.container }}

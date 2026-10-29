@@ -23,21 +23,31 @@ fail() {
   exit 1
 }
 
-step '1/6 bash syntax'
+step '1/7 bash syntax'
 find . -path ./.git -prune -o -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n || fail 'bash -n'
 bash -n install.sh || fail 'install.sh syntax'
 
-step '2/6 shellcheck'
+step '2/7 shellcheck'
 mapfile -t shell_files < <(find lib tests kickstart -type f -name '*.sh' | sort)
 shellcheck -s bash -x -e SC1090,SC1091 install.sh "${shell_files[@]}" || fail 'shellcheck'
 
-step '3/6 formatting (shfmt -i 2 -ci)'
+step '3/7 formatting (shfmt -i 2 -ci)'
 shfmt -d -i 2 -ci install.sh lib tests kickstart || fail 'shfmt'
 
-step '4/6 kickstart validation'
+step '4/7 workflow actions pinned to SHAs'
+unpinned="$(awk '
+  /^[[:space:]]*uses:[[:space:]]*[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]+@/ {
+    line = $0
+    sub(/^[[:space:]]*uses:[[:space:]]*/, "", line)
+    split(line, parts, /[[:space:]]/)
+    print parts[1]
+  }' .github/workflows/*.yml | grep -vE '@[0-9a-f]{40}$' || true)"
+[[ -z "$unpinned" ]] || fail "unpinned action reference(s): ${unpinned}"
+
+step '5/7 kickstart validation'
 kickstart/validate-kickstart.sh || fail 'kickstart validator'
 
-step '5/6 test suite'
+step '6/7 test suite'
 for test_file in tests/*_test.sh; do
   printf '  %-34s ' "$(basename "$test_file")"
   if "$test_file" >/tmp/verify_test.log 2>&1; then
@@ -50,9 +60,9 @@ for test_file in tests/*_test.sh; do
 done
 
 if [[ "${FAST:-0}" == 1 ]]; then
-  step '6/6 lock concurrency (skipped: FAST=1)'
+  step '7/7 lock concurrency (skipped: FAST=1)'
 else
-  step '6/6 lock concurrency stress'
+  step '7/7 lock concurrency stress'
   # The races this guards against only appear when processes interleave, which
   # the sequential tests above cannot produce.
   ROUNDS=5 WORKERS=12 tests/lock_concurrency_test.sh || fail 'lock concurrency'

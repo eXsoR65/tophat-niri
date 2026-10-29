@@ -226,6 +226,10 @@ re-emits a failed container's output tail as a single annotation, because
 container stdout is otherwise invisible to tooling (GitHub also caps annotations
 at ~10 per step).
 
+Actions are pinned to reviewed commit SHAs with the version in a trailing
+comment (a tag can be moved; a SHA cannot). Dependabot raises the PRs that bump
+them, so the pin stays current instead of fossilising.
+
 Releases: push an annotated tag `v<version>` matching `VERSION`;
 `.github/workflows/release.yml` re-runs the gates, fails on a VERSION/tag
 mismatch, then publishes a source archive + `SHA256SUMS` and opens the release
