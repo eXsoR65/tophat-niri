@@ -8,13 +8,14 @@ the limits are explicit rather than implied by a green check mark.
 | Tier | Trigger | Runs | Proves |
 |---|---|---|---|
 | 0 — fast | every push / PR | `tests/*_test.sh`, full dry run, package + upstream-repo checks (`.github/workflows/ci.yml`) | logic, CLI, markers, locking, stage wiring on a real Fedora userspace |
-| 1 — real install | **manual**: Actions → *Integration* → Run workflow (`.github/workflows/integration.yml`) | `tests/integration/container-install.sh` in a privileged systemd container | real dnf transactions, RPM Fusion + COPRs resolving, greetd enablement, PAM edits, marker contents, idempotent rerun, marker invalidation |
+| 1 — real install | **manual** (any Fedora release), **weekly** (Mon 05:00 UTC), and on every `v*` tag (`.github/workflows/integration.yml`) | `tests/integration/container-install.sh` in a privileged systemd container | real dnf transactions, RPM Fusion + COPRs resolving, greetd enablement, PAM edits, marker contents, idempotent rerun, marker invalidation |
 | 2 — VM | manual, on the Proxmox host | `tests/integration/proxmox-test.sh` (draft) | everything above plus **reboot** behaviour, on a real Fedora Minimal install |
 | 3 — hardware | manual | this document | GPU path, graphical login, niri/DMS session |
 
-Tier 1 is dispatched rather than scheduled on purpose: it pulls the whole
-desktop stack (several GB, 10–20 min), which is the wrong cost for every push.
-Promote it to a schedule once it has a stable history.
+Tier 1 never runs on every push: it pulls the whole desktop stack (several GB,
+10–20 min). It runs weekly as a drift alarm (a renamed package or a lagging COPR
+fails before a user hits it), on every `v*` tag against the code being released,
+and on demand for any Fedora release — including the next one before it is GA.
 
 Tier 2 is a draft: reviewed and dry-run (`DRY_RUN=1 ./proxmox-test.sh`) but not
 yet executed against a real Proxmox host. It needs a Fedora Minimal template

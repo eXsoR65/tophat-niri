@@ -1,9 +1,12 @@
 name: Integration
 
-# Deliberately dispatched only. A real install pulls the whole desktop stack
-# (several GB, 10-20 minutes), which is the wrong cost for every push. Run it
-# by hand after changes that touch package handling, services, or markers; add
-# a schedule once it has a stable history.
+# A real install pulls the whole desktop stack (several GB, 10-20 minutes), so
+# this never runs on every push. It runs:
+#   - on demand, for any Fedora release (including the next one, pre-GA)
+#   - weekly, as a drift alarm: a package rename or a lagging COPR shows up as a
+#     failure before a user hits it
+#   - on every v* tag, against the exact code being released
+# Only main carries v2.7-style markers, which is what the assertions describe.
 on:
   workflow_dispatch:
     inputs:
@@ -16,13 +19,18 @@ on:
           - fedora:45
           - fedora:latest
           - fedora:rawhide
+  schedule:
+    - cron: '0 5 * * 1'
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: read
 
 jobs:
   install:
-    name: real install on ${{ inputs.container }}
+    name: real install on ${{ inputs.container || 'fedora:latest' }}
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
@@ -37,6 +45,11 @@ jobs:
             /opt/hostedtoolcache/CodeQL /usr/local/share/boost
           df -h /
 
+      # Pulled in its own step so image progress does not bury the install log
+      # that gets surfaced when the gates fail.
+      - name: Pull image
+        run: docker pull --quiet ${{ inputs.container || 'fedora:latest' }}
+
       # The fedora image is deliberately minimal: it ships dnf, bash and
       # coreutils-single but no init and no user management tools, so systemd
       # and shadow-utils (for the harness's useradd) are installed inside it and
@@ -49,7 +62,7 @@ jobs:
             --hostname tophat-it \
             --tmpfs /run --tmpfs /run/lock \
             --volume /sys/fs/cgroup:/sys/fs/cgroup:rw \
-            ${{ inputs.container }} \
+            ${{ inputs.container || 'fedora:latest' }} \
             /bin/bash -c 'dnf install -y --setopt=install_weak_deps=False systemd shadow-utils && exec /usr/lib/systemd/systemd'
 
           for attempt in $(seq 1 90); do
@@ -94,7 +107,7 @@ jobs:
             line="${line//'%'/%25}"
             printf '%s%%0A' "$line"
           done)"
-          echo "::error::integration install failed (${{ inputs.container }}):%0A${msg}"
+          echo "::error::integration install failed (${{ inputs.container || 'fedora:latest' }}):%0A${msg}"
           exit 1
 
       - name: Remove the container
