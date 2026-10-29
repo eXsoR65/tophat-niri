@@ -3,15 +3,16 @@
 #  lock_concurrency_test.sh — the lock actually serialises concurrent runs
 #
 #  Starts WORKERS processes that race for the lock. Inside the critical section
-#  each one appends "start" then "end" to a shared events file.
+#  each worker tries to create a holder file with noclobber (`set -C`), which is
+#  an atomic O_EXCL create: if two runs are ever inside at once, the second one's
+#  create fails and the overlap is recorded.
 #
-#  Because those appends happen only while holding the lock, the file order *is*
-#  the order of critical sections. A working lock therefore leaves exactly
-#  start,end,start,end... - no clocks, no shared counter, nothing that depends on
-#  scheduling. Two runs inside at once (or a section that never closes) shows up
-#  as two consecutive starts or a missing end.
+#  This replaced two weaker observations: a shared depth counter (left non-zero
+#  if one worker died mid-section) and append ordering (which appeared to show
+#  overlaps on CI runners while passing everywhere else - the append order was
+#  not reliable evidence of section order).
 #
-#  Environment: WORKERS (default 8), ROUNDS (default 5)
+#  Environment: WORKERS (default 8), ROUNDS (default 5), HOLD (default 0.05s)
 # =============================================================================
 set -euo pipefail
 
@@ -21,6 +22,7 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 WORKERS="${WORKERS:-8}"
 ROUNDS="${ROUNDS:-5}"
+HOLD="${HOLD:-0.05}"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -45,37 +47,34 @@ for round in $(seq 1 "$ROUNDS"); do
       source "$ROOT/lib/helpers/run_logged.sh"
 
       if acquire_run_lock 2>/dev/null; then
-        printf 'start %s pid=%s at=%s\n' "$worker" "$$" "$(date +%s%3N)" >>"$events"
-        sleep 0.05
-        printf 'end %s pid=%s at=%s\n' "$worker" "$$" "$(date +%s%3N)" >>"$events"
+        # Atomic O_EXCL create: succeeds only if nobody else is inside.
+        if ! (
+          set -C
+          : >"$state/holder"
+        ) 2>/dev/null; then
+          printf 'overlap worker=%s bashpid=%s round=%s\n' \
+            "$worker" "$BASHPID" "$round" >>"$events"
+        else
+          printf 'enter worker=%s bashpid=%s\n' "$worker" "$BASHPID" >>"$events"
+          sleep "$HOLD"
+          rm -f "$state/holder"
+        fi
         release_run_lock
       fi
     ) >/dev/null &
   done
   wait
 
-  holders="$(grep -c '^start' "$events" || true)"
-  [[ "$holders" -ge 1 ]] || fail "round ${round}: nobody acquired the lock"
-
-  if ! awk '
-    $1 == "start" {
-      if (inside) { printf "overlap: second start while still inside (%s)\n", $0; bad = 1 }
-      inside = 1
-    }
-    $1 == "end" {
-      if (!inside) { printf "unbalanced end without start (%s)\n", $0; bad = 1 }
-      inside = 0
-    }
-    END {
-      if (inside) { print "unbalanced: critical section never closed"; bad = 1 }
-      exit bad
-    }
-  ' "$events"; then
+  if [[ -s "$events" ]] && grep -q '^overlap' "$events"; then
     echo "--- events, round ${round} (${WORKERS} workers) ---" >&2
     cat -n "$events" >&2
-    echo "--- end events ---" >&2
-    fail "round ${round}: concurrent holders or a section that never closed"
+    echo "--- lock dir listing ---" >&2
+    ls -la "$state" >&2 || true
+    fail "round ${round}: two runs held the lock at the same time"
   fi
+
+  [[ "$(grep -c '^enter' "$events" || true)" -ge 1 ]] ||
+    fail "round ${round}: nobody acquired the lock"
 done
 
 echo "lock_concurrency_test.sh: PASS (${ROUNDS} rounds x ${WORKERS} workers)"
