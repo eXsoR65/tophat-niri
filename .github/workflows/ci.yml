@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install shell tools
         run: |
@@ -94,7 +94,7 @@ jobs:
         container: [fedora:latest, fedora:45]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Pull image (${{ matrix.container }})
         run: docker pull --quiet ${{ matrix.container }}
