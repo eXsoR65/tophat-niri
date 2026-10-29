@@ -191,12 +191,13 @@ find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n && bash -n install.sh
 shellcheck -s bash -x -e SC1090,SC1091 install.sh $(find lib tests kickstart -name '*.sh' | sort)
 shfmt -d -i 2 -ci install.sh lib tests kickstart   # 2-space indent, case-indent
 kickstart/validate-kickstart.sh                    # rejects unsafe ks defaults
-for t in tests/*_test.sh; do "$t"; done             # 16 files: helpers, pkg, arg_parse,
+for t in tests/*_test.sh; do "$t"; done             # 17 files: helpers, pkg, arg_parse,
                                                      # stage_resolution, finalize_guard, locking,
                                                      # lock_concurrency, marker_invalidation,
                                                      # failure_recovery, exit_handler_scope,
-                                                     # and one per stage (config, preflight,
-                                                     # repos, packaging, services, extras)
+                                                     # action_pins, and one per stage (config,
+                                                     # preflight, repos, packaging, services,
+                                                     # extras)
 ```
 
 The `shell` job also asserts that `VERSION` matches the version in the
@@ -228,7 +229,10 @@ at ~10 per step).
 
 Actions are pinned to reviewed commit SHAs with the version in a trailing
 comment (a tag can be moved; a SHA cannot). Dependabot raises the PRs that bump
-them, so the pin stays current instead of fossilising.
+them, so the pin stays current instead of fossilising. `tests/check_action_pins.sh`
+enforces it in CI and in `verify_all`; `tests/action_pins_test.sh` holds a
+fixture for every spelling YAML allows, because that check has twice been blind
+to a form nobody wrote when it was added.
 
 Releases: push an annotated tag `v<version>` matching `VERSION`;
 `.github/workflows/release.yml` re-runs the gates, fails on a VERSION/tag
