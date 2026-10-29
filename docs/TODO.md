@@ -188,8 +188,10 @@ branched tree and a real `fedora:45` container, not a released Fedora.
 - [ ] **8.5** Re-run the Fedora job once F45 is actually GA: RPM Fusion swaps
       its release RPMs from `development/45` to `releases/45` at GA, and that
       path is the one real installs will use.
-- [ ] **8.6** Live validation of v2.5–v2.7 (and F45) on the laptop; all three
-      change installer behaviour.
+- [x] **8.6** Live validation of v2.5–v2.7 on the laptop (2026-10-29): full
+      install, idempotent rerun, clean lock lifecycle, then a working graphical
+      session (greetd, niri, DMS, applications, Wi-Fi, audio). Fedora 45 itself
+      was not the host — 8.5 still tracks the GA re-check.
 
 ## Phase 9 — Installation safety (review Phase A)
 
@@ -249,7 +251,8 @@ not new features.
 - [ ] **10.8b** Run the integration workflow once and fix whatever it finds.
 - [ ] **10.8c** Run the VM scenarios in `docs/INTEGRATION-TESTING.md` (fresh
       install, rerun, interrupted run, upgrade) on a Fedora Minimal VM.
-- [ ] **10.9** Run the real-GPU checklist on the laptop (also covers 8.6).
+- [x] **10.9** Run the real-GPU checklist on the laptop (2026-10-29): done
+      alongside 8.6 — graphical login, niri, DMS, applications, Wi-Fi, audio.
 
 ### From the Codex review rounds on PR #4 / #6
 
