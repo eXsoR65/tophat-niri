@@ -233,7 +233,12 @@ skip_stage() {
 # `trap ... EXIT` replaces every other handler: Homebrew's temp-file cleanup did
 # exactly that and silently dropped the lock's cleanup, leaving a stale lock
 # behind after a successful run.
-declare -a _EXIT_HANDLERS=()
+# Global on purpose (-g): install.sh sources the helpers from inside main(), so a
+# plain `declare` here would be scoped to main() - and the EXIT trap runs after
+# main() has returned, where that binding no longer exists. Under `set -u` the
+# trap then dies with "unbound variable" and no cleanup handler runs at all,
+# leaving the run lock behind after a successful install.
+declare -ga _EXIT_HANDLERS=()
 
 register_exit_handler() {
   _EXIT_HANDLERS+=("$1")
@@ -243,7 +248,8 @@ register_exit_handler() {
 _run_exit_handlers() {
   local handler
 
-  ((${#_EXIT_HANDLERS[@]} > 0)) || return 0
+  # Defensive: if the registry were ever unset, exiting must not fail.
+  [[ -n "${_EXIT_HANDLERS[*]:-}" ]] || return 0
   for handler in "${_EXIT_HANDLERS[@]}"; do
     "$handler" || true
   done
