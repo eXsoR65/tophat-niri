@@ -44,18 +44,7 @@ jobs:
 
       # A tag can be moved; a commit SHA cannot. Dependabot bumps the pin.
       - name: Workflow actions pinned
-        run: |
-          unpinned="$(awk '
-            /^[[:space:]]*uses:[[:space:]]*[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]+@/ {
-              line = $0
-              sub(/^[[:space:]]*uses:[[:space:]]*/, "", line)
-              split(line, parts, /[[:space:]]/)
-              print parts[1]
-            }' .github/workflows/*.yml | grep -vE '@[0-9a-f]{40}$' || true)"
-          if [[ -n "$unpinned" ]]; then
-            echo "::error::actions must be pinned to a 40-character commit SHA: ${unpinned}"
-            exit 1
-          fi
+        run: tests/check_action_pins.sh
 
       - name: Formatting
         run: |

@@ -35,14 +35,7 @@ step '3/7 formatting (shfmt -i 2 -ci)'
 shfmt -d -i 2 -ci install.sh lib tests kickstart || fail 'shfmt'
 
 step '4/7 workflow actions pinned to SHAs'
-unpinned="$(awk '
-  /^[[:space:]]*uses:[[:space:]]*[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]+@/ {
-    line = $0
-    sub(/^[[:space:]]*uses:[[:space:]]*/, "", line)
-    split(line, parts, /[[:space:]]/)
-    print parts[1]
-  }' .github/workflows/*.yml | grep -vE '@[0-9a-f]{40}$' || true)"
-[[ -z "$unpinned" ]] || fail "unpinned action reference(s): ${unpinned}"
+tests/check_action_pins.sh || fail 'action pinning'
 
 step '5/7 kickstart validation'
 kickstart/validate-kickstart.sh || fail 'kickstart validator'
