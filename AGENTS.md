@@ -231,10 +231,16 @@ at ~10 per step).
 
 Actions are pinned to reviewed commit SHAs with the version in a trailing
 comment (a tag can be moved; a SHA cannot). Dependabot raises the PRs that bump
-them, so the pin stays current instead of fossilising. `tests/check_action_pins.sh`
-enforces it in CI and in `verify_all`; `tests/action_pins_test.sh` holds a
-fixture for every spelling YAML allows, because that check has repeatedly been
-blind to a form nobody wrote when it was added.
+them, so the pin stays current instead of fossilising.
+
+`tests/check_action_pins.sh` enforces it in CI and in `verify_all`. It is a thin
+wrapper around `tests/check_action_pins.py`, which **parses** the workflow YAML
+(PyYAML: `python3-yaml` on Ubuntu, `python3-pyyaml` in the Fedora containers)
+rather than scanning it line by line — flow mappings, folded scalars, quoted keys
+and aliases all defeated the scanner. `tests/action_pins_test.sh` keeps a fixture
+for each of those shapes in both directions, so a new one is a test change rather
+than another review round. Only local actions, digest-pinned images and
+40-character SHAs are accepted.
 
 Releases: push an annotated tag `v<version>` matching `VERSION`;
 `.github/workflows/release.yml` re-runs the gates, fails on a VERSION/tag

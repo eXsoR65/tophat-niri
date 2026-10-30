@@ -18,7 +18,10 @@ jobs:
       - name: Install shell tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck shfmt
+          # python3-yaml is for tests/check_action_pins.sh, which parses the
+          # workflow YAML rather than scanning it (the Fedora job runs the same
+          # suite inside the container and installs it there too).
+          sudo apt-get install -y shellcheck shfmt python3-yaml
 
       # VERSION and the install.sh header drift apart easily; the release
       # workflow only compares VERSION against the tag.
@@ -120,9 +123,9 @@ jobs:
           # dnf5 exits non-zero when there is nothing to do (packages already
           # present), so its exit status is not a reliable signal here. Install,
           # tolerate that, then verify the prerequisites are actually there.
-          dnf install -y --setopt=install_weak_deps=False findutils gawk curl ||
+          dnf install -y --setopt=install_weak_deps=False findutils gawk curl python3-pyyaml ||
             echo "dnf returned non-zero; verifying packages instead of trusting it"
-          for pkg in findutils gawk curl; do
+          for pkg in findutils gawk curl python3-pyyaml; do
             rpm -q "$pkg" >/dev/null 2>&1 || {
               echo "prerequisite missing: $pkg" >&2
               exit 1
