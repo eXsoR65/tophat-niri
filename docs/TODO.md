@@ -98,7 +98,7 @@ a target machine except the new `--version` flag.
       `TOPHAT_VERSION` → `VERSION` → `unknown`), documented in `usage()`, the
       README and `tests/arg_parse_test.sh`. Works without root.
 - [x] **5.2** Tag-triggered release workflow (`.github/workflows/release.yml`):
-      re-runs all five gates, refuses to publish when `VERSION` disagrees with
+      re-runs every gate, refuses to publish when `VERSION` disagrees with
       the tag, builds a source archive + `SHA256SUMS`, and creates or refreshes
       the release with `gh` (annotated tag body as the notes).
 - [x] **5.3** Fedora CI job: the Fedora-relevant gates inside `fedora:latest`
@@ -123,8 +123,9 @@ a target machine except the new `--version` flag.
       implement behind an opt-in file, or delete it.
 - [ ] **6.3** Community files: `CONTRIBUTING.md`, issue templates,
       `SECURITY.md`. The repo has stars and a fork but no contribution path.
-- [ ] **6.4** Decide whether `dev` stays a long-lived integration branch now
-      that releases are tag-driven and CI runs on pull requests.
+- [x] **6.4** `dev` stays the long-lived integration branch (2026-10-29).
+      Work lands there, `main` is PR-only and protected by the `shell` and
+      `fedora` checks, and releases are cut by annotated tag from `main`.
 - [ ] **6.5** Release assets beyond the source archive (e.g. a TUI binary from
       TUI-PLAN M4) once that work exists.
 
@@ -218,8 +219,10 @@ not new features.
 - [x] **9.7** Protect `main` — require the `shell` and `fedora` checks, block
       force-pushes, require a PR for changes. Done on 2026-10-28: `main` reports
       `protected: true`; `dev` is intentionally unprotected.
-- [ ] **9.8** Pin workflow actions to reviewed commit SHAs once Dependabot is
-      keeping them current.
+- [x] **9.8** Workflow actions are pinned to reviewed commit SHAs
+      (`actions/checkout` at v7.0.1, `3d3c42e`), with the version in a trailing
+      comment. Dependabot keeps them current by bumping the SHA, so the pin
+      cannot silently drift; a moved tag can no longer change what runs.
 
 ## Phase 10 — Reliability and test infrastructure (review Phases B/C)
 
@@ -248,7 +251,9 @@ not new features.
       (dispatched real install in a systemd container) and
       `tests/integration/container-install.sh`, plus a drafted
       `tests/integration/proxmox-test.sh` for VM-level runs.
-- [ ] **10.8b** Run the integration workflow once and fix whatever it finds.
+- [x] **10.8b** Integration workflow run for real: dispatched against `dev`
+      earlier, then automatically against the `v2.7` tag (2026-10-29) — a real
+      install on `fedora:latest` passed on the released commit.
 - [ ] **10.8c** Run the VM scenarios in `docs/INTEGRATION-TESTING.md` (fresh
       install, rerun, interrupted run, upgrade) on a Fedora Minimal VM.
 - [x] **10.9** Run the real-GPU checklist on the laptop (2026-10-29): done

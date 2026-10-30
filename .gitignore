@@ -3,3 +3,7 @@ packages/applications.packages
 packages/flatpaks.packages
 packages/distrobox.enable
 packages/homebrew.packages
+
+# Python bytecode from the workflow-pin checker
+__pycache__/
+*.pyc

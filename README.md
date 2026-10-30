@@ -192,7 +192,7 @@ docs/                      Improvement backlog and the TUI plan
 
 ## Local development
 
-CI runs five gates on every push to `main`/`dev` and on pull requests. A second
+CI runs every gate on each push to `main`/`dev` and on pull requests. A second
 job re-runs the Fedora-relevant subset inside a container matrix of
 `fedora:latest` and `fedora:45` (bash syntax, kickstart validation, the test
 suite, `--version`/`--help` smoke tests), and also checks on each release that
@@ -234,7 +234,7 @@ git tag -a "v${version}" -m "Tophat v${version}"   # tag must match VERSION
 git push origin "v${version}"
 ```
 
-The `Release` workflow then re-runs all five gates, refuses to publish if
+The `Release` workflow then re-runs every gate, refuses to publish if
 `VERSION` and the tag disagree, builds a source archive plus `SHA256SUMS`, and
 creates the GitHub release using the annotated tag message as the release body.
 

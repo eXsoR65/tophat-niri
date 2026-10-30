@@ -13,12 +13,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install shell tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck shfmt
+          # python3-yaml is for tests/check_action_pins.sh, which parses the
+          # workflow YAML rather than scanning it (the Fedora job runs the same
+          # suite inside the container and installs it there too).
+          sudo apt-get install -y shellcheck shfmt python3-yaml
 
       # VERSION and the install.sh header drift apart easily; the release
       # workflow only compares VERSION against the tag.
@@ -36,11 +39,18 @@ jobs:
         run: |
           find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
           bash -n install.sh
+          # The one Python file: the same idea as bash -n.
+          python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read())' \
+            tests/check_action_pins.py
 
       - name: ShellCheck
         run: |
           mapfile -t shell_files < <(find lib tests kickstart -type f -name '*.sh' -print | sort)
           shellcheck -s bash -x -e SC1090,SC1091 install.sh "${shell_files[@]}"
+
+      # A tag can be moved; a commit SHA cannot. Dependabot bumps the pin.
+      - name: Workflow actions pinned
+        run: tests/check_action_pins.sh
 
       - name: Formatting
         run: |
@@ -94,7 +104,7 @@ jobs:
         container: [fedora:latest, fedora:45]
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Pull image (${{ matrix.container }})
         run: docker pull --quiet ${{ matrix.container }}
@@ -116,9 +126,9 @@ jobs:
           # dnf5 exits non-zero when there is nothing to do (packages already
           # present), so its exit status is not a reliable signal here. Install,
           # tolerate that, then verify the prerequisites are actually there.
-          dnf install -y --setopt=install_weak_deps=False findutils gawk curl ||
+          dnf install -y --setopt=install_weak_deps=False findutils gawk curl python3-pyyaml ||
             echo "dnf returned non-zero; verifying packages instead of trusting it"
-          for pkg in findutils gawk curl; do
+          for pkg in findutils gawk curl python3-pyyaml; do
             rpm -q "$pkg" >/dev/null 2>&1 || {
               echo "prerequisite missing: $pkg" >&2
               exit 1
@@ -128,6 +138,8 @@ jobs:
           echo '=== Bash syntax ==='
           find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
           bash -n install.sh
+          python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read())' \
+            tests/check_action_pins.py
 
           echo '=== Kickstart validation ==='
           kickstart/validate-kickstart.sh
