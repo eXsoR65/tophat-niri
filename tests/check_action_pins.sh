@@ -48,7 +48,10 @@ refs="$(awk '
     ind = indent_of($0)
 
     # Inside a block scalar, skip everything indented deeper than the marker.
+    # A blank line belongs to the scalar even with no indentation, so it must not
+    # end the block - otherwise a heredoc after a blank line is read as YAML.
     if (in_block) {
+      if ($0 ~ /^[[:space:]]*$/) next
       if (ind > block_indent) next
       in_block = 0
     }
@@ -68,8 +71,10 @@ refs="$(awk '
     split(line, parts, /[[:space:]]/)
     ref = parts[1]
 
-    # Strip quotes of either style; \047 is a single quote.
+    # Strip quotes of either style; \047 is a single quote. Strip CR too, so a
+    # CRLF checkout does not turn a pinned ref into an unrecognised one.
     gsub(/["\047]/, "", ref)
+    sub(/\r$/, "", ref)
     print ref
   }
 ' "${workflows[@]}")"

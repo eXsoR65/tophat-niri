@@ -113,6 +113,24 @@ expect_pass uses-in-folded-block w.yml "jobs:
           uses: actions/checkout@v7
           EOF"
 
+# A blank line inside a run block belongs to the scalar, so the heredoc after it
+# is still script text, not an action reference.
+expect_pass blank-line-in-run-block w.yml "jobs:
+  a:
+    steps:
+      - name: Explain
+        run: |
+          echo start
+
+          cat <<'EOF'
+          uses: actions/checkout@v7
+          EOF"
+
+# CRLF checkouts must behave identically (a stray carriage return would otherwise
+# make a pinned ref unrecognisable).
+expect_pass crlf-pinned crlf.yml "$(printf 'jobs:\r\n  a:\r\n    steps:\r\n      - uses: actions/checkout@%s\r\n' "$SHA")"
+expect_fail crlf-unpinned crlf.yml "$(printf 'jobs:\r\n  a:\r\n    steps:\r\n      - uses: actions/checkout@v7\r\n')" "actions/checkout@v7"
+
 # --- unpinned in each spelling ----------------------------------------------
 expect_fail named w.yml "jobs:
   a:
