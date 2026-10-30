@@ -5,32 +5,18 @@
 // in later milestones (see docs/TUI-PLAN.md).
 
 import { useEffect, useRef, useState } from "react";
-import { useKeyboard } from "@opentui/react";
+import { useKeyboard, useRenderer } from "@opentui/react";
 import { STAGES, type StageName } from "./stages.ts";
-import { buildArgs, defaultConfig, detectedUser, toggleStage, type Config } from "./config.ts";
+import { defaultConfig, detectedUser, toggleStage, type Config } from "./config.ts";
 import { markerStages } from "./markers.ts";
 import { tailLines } from "./logtail.ts";
 import { latestLog, resolvePaths } from "./paths.ts";
 import { startInstall, type Engine } from "./engine.ts";
+import { FLAG_LABELS, ROWS } from "./rows.ts";
+import { keyAction, moveCursor } from "./keys.ts";
 import { readdirSync, readFileSync } from "node:fs";
 
 export type Screen = "config" | "run" | "done";
-
-type Row = { kind: "flag"; key: "dryRun" | "verbose" | "acceptRemovals" } | { kind: "stage"; stage: StageName } | { kind: "start" };
-
-const ROWS: Row[] = [
-  { kind: "flag", key: "dryRun" },
-  { kind: "flag", key: "verbose" },
-  { kind: "flag", key: "acceptRemovals" },
-  ...STAGES.map((stage) => ({ kind: "stage", stage }) as Row),
-  { kind: "start" },
-];
-
-const FLAG_LABELS: Record<"dryRun" | "verbose" | "acceptRemovals", string> = {
-  dryRun: "Dry run (change nothing)",
-  verbose: "Verbose (show command output)",
-  acceptRemovals: "Allow package removals",
-};
 
 export type AppProps = {
   initialScreen?: Screen;
@@ -50,6 +36,7 @@ export function App({
   paths,
   startEngine,
 }: AppProps) {
+  const renderer = useRenderer();
   const enginePaths = paths ?? resolvePaths();
   const [screen, setScreen] = useState<Screen>(initialScreen);
   const [config, setConfig] = useState<Config>(initialConfig ?? defaultConfig(detectedUser()));
@@ -61,7 +48,10 @@ export function App({
 
   const engineRef = useRef<Engine | null>(null);
   const startedAtRef = useRef(0);
-  const logRef = useRef("");
+  // The keyboard handler closes over the state of the last render. Several keys
+  // can arrive between renders (key repeat, a paste), so the current row has to
+  // be read from a ref rather than from the captured `cursor`.
+  const cursorRef = useRef(0);
 
   // Poll the log and the markers while the installer runs. Both already exist:
   // run_logged writes the log and the stage markers are plain files.
@@ -70,9 +60,7 @@ export function App({
 
     const tick = () => {
       try {
-        const text = readFileSync(latestLog(enginePaths), "utf8");
-        logRef.current = text;
-        setLogLines(tailLines(text, 12));
+        setLogLines(tailLines(readFileSync(latestLog(enginePaths), "utf8"), 12));
       } catch {
         // No log yet; the first lines appear once the installer starts writing.
       }
@@ -89,6 +77,7 @@ export function App({
     return () => clearInterval(timer);
   }, [screen, enginePaths]);
 
+  // Leaving the app must not leave an installer running unattended.
   useEffect(() => {
     return () => {
       engineRef.current?.child.kill("SIGTERM");
@@ -108,32 +97,39 @@ export function App({
   };
 
   useKeyboard((key) => {
-    const name = key.name;
+    const action = keyAction(screen, key.name, cursorRef.current, ROWS);
 
-    if (screen === "config") {
-      if (name === "up") setCursor((c) => (c - 1 + ROWS.length) % ROWS.length);
-      else if (name === "down") setCursor((c) => (c + 1) % ROWS.length);
-      else if (name === "space") {
-        const row = ROWS[cursor];
-        if (!row) return;
-        if (row.kind === "flag") setConfig((c) => ({ ...c, [row.key]: !c[row.key] }));
-        else if (row.kind === "stage") setConfig((c) => toggleStage(c, row.stage));
-        else start();
-      } else if (name === "return" || name === "enter") {
-        const row = ROWS[cursor];
-        if (row?.kind === "start") start();
-        else start();
-      } else if (name === "q") process.exit(0);
-      return;
-    }
-
-    if (screen === "run") {
-      if (name === "q") engineRef.current?.child.kill("SIGTERM");
-      return;
-    }
-
-    if (screen === "done" && name === "q") {
-      process.exit(0);
+    switch (action.type) {
+      case "move":
+        // Advance the ref synchronously: state updaters are deferred, so a burst
+        // of keys within one batch would otherwise all read the same row.
+        cursorRef.current = moveCursor(cursorRef.current, action.delta, ROWS.length);
+        setCursor(cursorRef.current);
+        break;
+      case "toggle-row":
+        if (action.row.kind === "flag") {
+          const flag = action.row.key;
+          setConfig((current) => ({ ...current, [flag]: !current[flag] }));
+        } else if (action.row.kind === "stage") {
+          // Captured before the updater: narrowing does not survive into the
+          // closure, since `action` is a parameter binding.
+          const stage = action.row.stage;
+          setConfig((current) => toggleStage(current, stage));
+        }
+        break;
+      case "start":
+        start();
+        break;
+      case "quit":
+        // OpenTUI restores the terminal inside destroy(); a direct process.exit()
+        // would skip that and can leave the terminal in raw mode.
+        renderer.destroy();
+        break;
+      case "abort":
+        engineRef.current?.child.kill("SIGTERM");
+        break;
+      case "none":
+        break;
     }
   });
 
@@ -181,11 +177,17 @@ export function App({
   }
 
   if (screen === "run") {
-    const dots = STAGES.map((stage) => `${done.has(stage) ? "[x]" : "[ ]"} ${stage}`).join("   ");
     return (
       <box style={{ flexDirection: "column", padding: 1, gap: 1 }}>
         <text fg="#00b0ff">Tophat - installing</text>
-        <text fg="#888888">{dots}</text>
+        <text>
+          {STAGES.map((stage, index) => (
+            <span key={stage} fg={done.has(stage) ? "green" : "gray"}>
+              {`${done.has(stage) ? "[x]" : "[ ]"} ${stage}`}
+              {index < STAGES.length - 1 ? "   " : ""}
+            </span>
+          ))}
+        </text>
         <text fg="#888888">
           {elapsed}s elapsed{config.dryRun ? "  (dry run)" : ""}
         </text>

@@ -183,7 +183,11 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
   launcher with a Bash fallback, and a separate `tui` CI job. M2–M5 are not
   started. **The Bash installer remains the only engine**: the TUI builds
   argv, spawns `install.sh`, and reads `$SETUP_LOG` plus the stage markers; it
-  must never reimplement installer logic.
+  must never reimplement installer logic. The **OpenTUI skill** is installed at
+  `~/.agents/skills/opentui` (from github.com/msmps/opentui-skill); load it
+  before changing `tui/`. Its two rules that bit this codebase already: never
+  call `process.exit()` (use `renderer.destroy()` so the terminal is restored)
+  and use nested text modifiers rather than `bold`/`italic` props.
 - **v2.4–v2.7 hardening** is done: every stage has at least one test and the
   review findings are closed or explicitly deferred, and v2.7 is hardware
   validated. What remains — the dotfiles decision, community files, the `dev`
