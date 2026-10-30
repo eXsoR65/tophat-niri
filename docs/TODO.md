@@ -119,8 +119,9 @@ a target machine except the new `--version` flag.
       optional apps, marker skip), `services` (greeter backup/idempotency,
       missing dms-greeter refusal), `extras` (skip without opt-ins, input
       validation, distrobox resolution). Eleven test files now.
-- [ ] **6.2** Decide the fate of the `dotfiles.sh` stub (deferred from 4.4):
-      implement behind an opt-in file, or delete it.
+- [x] **6.2** `dotfiles.sh` stays a documented stub for now (decided
+      2026-10-30): dotfiles are personal, and a bad default is worse than none.
+      Revisit if an opt-in file format is ever wanted.
 - [ ] **6.3** Community files: `CONTRIBUTING.md`, issue templates,
       `SECURITY.md`. The repo has stars and a fork but no contribution path.
 - [x] **6.4** `dev` stays the long-lived integration branch (2026-10-29).

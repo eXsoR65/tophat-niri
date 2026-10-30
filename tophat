@@ -1,0 +1,44 @@
+#!/bin/bash
+# =============================================================================
+#  tophat — run the TUI when it is usable, otherwise run install.sh
+#
+#  The TUI is strictly additive. Anything at all unusual (no Bun, no deps, not a
+#  terminal, arguments given, --no-tui) falls back to the Bash installer, so this
+#  launcher can never be the reason an install cannot run.
+#
+#  Usage:
+#    ./tophat                 TUI when possible, else install.sh
+#    ./tophat --no-tui [...]  always install.sh
+#    ./tophat [options...]    arguments are passed to install.sh
+# =============================================================================
+set -euo pipefail
+
+ROOT="${TOPHAT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+INSTALL="$ROOT/install.sh"
+TUI_ENTRY="$ROOT/tui/src/index.tsx"
+
+args=()
+use_tui=true
+for arg in "$@"; do
+  case "$arg" in
+    --no-tui) use_tui=false ;;
+    *) args+=("$arg") ;;
+  esac
+done
+
+# Explicit arguments (other than --no-tui) mean the caller knows what they want:
+# hand them to the installer rather than second-guessing them in a form.
+((${#args[@]} == 0)) || use_tui=false
+
+fallback() {
+  exec bash "$INSTALL" "$@"
+}
+
+[[ "$use_tui" == true ]] || fallback "${args[@]}"
+# A TUI needs a terminal on both ends; under sudo -n, cron or a pipe it has none.
+[[ -t 0 && -t 1 ]] || fallback "${args[@]}"
+command -v bun >/dev/null 2>&1 || fallback "${args[@]}"
+[[ -f "$TUI_ENTRY" ]] || fallback "${args[@]}"
+[[ -d "$ROOT/tui/node_modules/@opentui" ]] || fallback "${args[@]}"
+
+exec bun "$TUI_ENTRY" "${args[@]}"

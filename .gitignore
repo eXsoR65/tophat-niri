@@ -7,3 +7,7 @@ packages/homebrew.packages
 # Python bytecode from the workflow-pin checker
 __pycache__/
 *.pyc
+
+# Local toolchain and TUI dependencies
+.tools/
+tui/node_modules/

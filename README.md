@@ -100,6 +100,29 @@ Available stages:
 preflight, repos, packaging, config, services, extras, finalize
 ```
 
+## Optional TUI
+
+`./tophat` runs the same installer behind a small terminal UI: pick stages and
+options, start, watch the log and the stage markers, then reboot if it worked.
+
+```bash
+./tophat              # TUI when possible, install.sh otherwise
+./tophat --no-tui     # always the plain installer
+```
+
+The TUI is strictly optional. It needs [Bun](https://bun.sh) and its
+dependencies installed once:
+
+```bash
+cd tui && bun install
+```
+
+Without Bun, without those dependencies, with any argument, or when stdin or
+stdout is not a terminal, `./tophat` runs `install.sh` unchanged — the launcher
+can never be the reason an install fails. `install.sh` remains the only engine:
+the TUI passes flags and reads the log and `stage-*.done` markers, and does not
+reimplement any installer logic.
+
 ## Optional applications
 
 Application installs are controlled by:
@@ -187,6 +210,8 @@ lib/finalize/              Cleanup and completion marker
 packages/                  Package list files, including conditional Intel Wi-Fi firmware
 kickstart/                 Fedora Minimal kickstart example and its safety validator
 tests/                     Shell test suite (run by CI)
+tophat                     Launcher: TUI when usable, install.sh otherwise
+tui/                       Optional OpenTUI (React) front end, Bun project
 docs/                      Improvement backlog and the TUI plan
 ```
 

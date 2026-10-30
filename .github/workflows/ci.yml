@@ -96,6 +96,33 @@ jobs:
   #
   # Two legs: the release Fedora's users are on today, and the next one, so a
   # new Fedora release is tested before it ships rather than after.
+  # The TUI has its own toolchain, so it gets its own job: the Bash gates stay
+  # dependency-free, and a TypeScript failure cannot mask a Bash failure.
+  tui:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Installed by script rather than an action, so there is no extra action
+      # reference to pin and review.
+      - name: Install Bun
+        run: |
+          curl -fsSL https://bun.sh/install | bash
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        working-directory: tui
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: tui
+        run: bun x tsc --noEmit
+
+      - name: Tests
+        working-directory: tui
+        run: bun test
+
   fedora:
     runs-on: ubuntu-latest
     strategy:

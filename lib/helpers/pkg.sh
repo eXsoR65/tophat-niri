@@ -94,6 +94,11 @@ pkg_remove() {
           return 1
           ;;
       esac
+    elif [[ "${TOPHAT_TUI:-0}" == 1 ]]; then
+      # The TUI answers this on its config screen. Leaving the toggle off means
+      # "keep them", not "fail the stage", so the run continues.
+      log_warn "Skipping package removal (not enabled in the TUI); DMS-replaced packages stay installed"
+      return 0
     else
       log_error "Package removal requires confirmation"
       log_error "Re-run with --accept-package-removals to allow this non-interactively"

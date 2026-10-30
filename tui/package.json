@@ -1,0 +1,21 @@
+{
+  "name": "tophat-tui",
+  "private": true,
+  "type": "module",
+  "module": "src/index.tsx",
+  "scripts": {
+    "start": "bun run src/index.tsx",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.8.0",
+    "@opentui/react": "^0.8.0",
+    "react": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "@types/react": "^19.3.0",
+    "typescript": "^7.0.2"
+  }
+}

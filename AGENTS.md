@@ -143,6 +143,11 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
     `run_logged.sh` — including the `trap ... 0` spelling, and including
     `install.sh`.
 
+11. **The TUI is additive**: `./tophat` must fall back to `install.sh` whenever
+    anything is missing or unusual (no Bun, no `tui/node_modules`, non-TTY,
+    arguments given, `--no-tui`). `tests/tui_launcher_test.sh` asserts those
+    fallbacks; the launcher must never be a prerequisite for installing.
+
 ## Known quirks / rough edges
 
 - `hardware_firmware.sh` re-detects Intel Wi-Fi only when
@@ -173,9 +178,12 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
 
 ## Planned work
 
-- **TUI** (OpenTUI + `@opentui/react`, Bun): plan lives in
-  `docs/TUI-PLAN.md`. In-repo `tui/`, `./tophat` launcher with Bash fallback,
-  milestones M1–M5. Not yet implemented — Bash remains the only engine.
+- **TUI** (OpenTUI + `@opentui/react`, Bun): plan and milestone status live in
+  `docs/TUI-PLAN.md`. M1 is in the tree: `tui/` (Bun project), `./tophat`
+  launcher with a Bash fallback, and a separate `tui` CI job. M2–M5 are not
+  started. **The Bash installer remains the only engine**: the TUI builds
+  argv, spawns `install.sh`, and reads `$SETUP_LOG` plus the stage markers; it
+  must never reimplement installer logic.
 - **v2.4–v2.7 hardening** is done: every stage has at least one test and the
   review findings are closed or explicitly deferred, and v2.7 is hardware
   validated. What remains — the dotfiles decision, community files, the `dev`
@@ -193,13 +201,13 @@ shellcheck -s bash -x -e SC1090,SC1091 install.sh $(find lib tests kickstart -na
 tests/check_action_pins.sh                         # every action pinned to a SHA
 shfmt -d -i 2 -ci install.sh lib tests kickstart   # 2-space indent, case-indent
 kickstart/validate-kickstart.sh                    # rejects unsafe ks defaults
-for t in tests/*_test.sh; do "$t"; done             # 17 files: helpers, pkg, arg_parse,
+for t in tests/*_test.sh; do "$t"; done             # 18 files: helpers, pkg, arg_parse,
                                                      # stage_resolution, finalize_guard, locking,
                                                      # lock_concurrency, marker_invalidation,
                                                      # failure_recovery, exit_handler_scope,
-                                                     # action_pins, and one per stage (config,
-                                                     # preflight, repos, packaging, services,
-                                                     # extras)
+                                                     # action_pins, tui_launcher, and one per
+                                                     # stage (config, preflight, repos,
+                                                     # packaging, services, extras)
 ```
 
 The `shell` job also asserts that `VERSION` matches the version in the
@@ -210,9 +218,12 @@ a `./install.sh --dry-run` against a throwaway user, which is the closest CI can
 get to a real install without a VM. `docs/INTEGRATION-TESTING.md` records what
 still needs a VM or a real GPU, and the manual procedure for both.
 
-Two jobs: `shell` on `ubuntu-latest` runs every gate above. `fedora` runs
-inside a container matrix of `fedora:latest` (the current release) and
-`fedora:45` (the next one), covering only what genuinely needs Fedora — bash
+Three jobs. `shell` on `ubuntu-latest` runs every gate above (Bash only, no
+toolchain beyond shellcheck/shfmt/python3-yaml). `tui` installs Bun by script,
+then runs `bun install --frozen-lockfile`, `bun x tsc --noEmit` and `bun test`
+in `tui/`. `fedora` runs inside a container matrix of `fedora:latest` (the
+current release) and `fedora:45` (the next one), covering only what genuinely
+needs Fedora — bash
 syntax, the kickstart validator, the test suite, `./install.sh --version` /
 `--help` smoke tests, and two release-readiness checks:
 

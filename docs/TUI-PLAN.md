@@ -1,6 +1,6 @@
 # Tophat TUI Plan
 
-Status: **planning** (no code yet)
+Status: **M1 implemented** (M2–M5 planned)
 Frontend stack: [OpenTUI](https://opentui.com) + React bindings + Bun
 Tracking: this document (not `docs/TODO.md` — Phases 1–4 there are done)
 
@@ -59,7 +59,7 @@ Phase 2/3 work already solves the TUI's hardest problems:
 
 | Milestone | Change | Size |
 |---|---|---|
-| M1 | `TOPHAT_TUI=1` env guard: skip the two `read </dev/tty` prompts (removal confirm already has the flag path; reboot prompt defaults to "no" and the TUI shows its own reboot button). Without this the child process fights the TUI for the terminal. | ~10 lines |
+| M1 | `TOPHAT_TUI=1` guard. Both prompts are already `[[ -t 0 ]]`-gated and the TUI spawns with stdin from `/dev/null`, so they cannot block; the guard adds one behaviour — declining removals in the TUI skips them instead of failing the stage. | ~8 lines |
 | M3 | When `TOPHAT_TUI=1`, `run_logged`/`run_stage` additionally emit NDJSON events to `$SETUP_STATE_DIR/events.ndjson`: `stage_start`, `stage_done`, `stage_fail`, `command`, `marker` | ~30 lines |
 
 The TUI also **passes stdin from `/dev/null`** to the installer so nothing can
@@ -67,12 +67,21 @@ block on input even if a prompt slips through.
 
 ## Milestones
 
-- [ ] **M1 — Scaffold + simple flow.** `tui/` Bun project with
+- [x] **M1 — Scaffold + simple flow.** Done 2026-10-30. `tui/` Bun project with
   `@opentui/react`. Screens: Config (target-user, stage multi-select, dry-run /
   verbose / accept-removals toggles) → Run (live `$SETUP_LOG` tail, spinner,
   stage dots from state-dir markers) → Done (exit status, summary, reboot
   button). Includes the `TOPHAT_TUI` Bash guard and the `./tophat` launcher
   with fallback. Runs against `install.sh` as-is otherwise.
+
+  **What M1 actually shipped**, so the next milestone starts from reality:
+  Config screen with the three toggles and a stage checklist; Run screen with
+  stage dots from `stage-*.done` and a 12-line tail of `latest.log`; Done screen
+  with exit status and marker count. `buildArgs`/`tailLines`/`parseMarker` are
+  pure modules with tests; the UI has render tests via `@opentui/react/test-utils`.
+  **Deferred to M2:** the target-user text input (M1 shows the detected user and
+  accepts no override), the resolved-plan preview, and the replacement-package
+  preview for the removals toggle.
 - [ ] **M2 — Stage graph UI.** Checklist with dependency visualization: select
   `config` → `preflight/repos/packaging` auto-check, labeled "dependency".
   Resolved plan preview from `lib/stages.sh`. Replacement-package preview for
