@@ -179,13 +179,15 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
 ## Planned work
 
 - **TUI** (OpenTUI + `@opentui/react`, Bun): plan and milestone status live in
-  `docs/TUI-PLAN.md`. M1 and M2 are in the tree: `tui/` (Bun project),
-  `./tophat` launcher with a Bash fallback, a separate `tui` CI job, and the
-  resolved-plan/dependency preview driven by `install.sh --print-plan`. M3–M5
-  are not started. **The Bash installer remains the only engine**: the TUI builds
+  `docs/TUI-PLAN.md`. M1–M3 are in the tree: `tui/` (Bun project), `./tophat`
+  launcher with a Bash fallback, a separate `tui` CI job, the resolved-plan and
+  dependency preview driven by `install.sh --print-plan`, and the stage board
+  fed by the NDJSON event stream. M4–M5 are not started. **The Bash installer remains the only engine**: the TUI builds
   argv, spawns `install.sh`, and reads `$SETUP_LOG` plus the stage markers; it
   must never reimplement installer logic: the stage plan comes from
-  `install.sh --print-plan`, never from a copy of `STAGE_DEPENDENCIES`. The
+  `install.sh --print-plan`, never from a copy of `STAGE_DEPENDENCIES`, and
+  progress comes from the NDJSON stream (`events.ndjson`, written only when
+  `TOPHAT_TUI=1`) rather than by parsing the human log. The
   **OpenTUI skill** is installed at
   `~/.agents/skills/opentui` (from github.com/msmps/opentui-skill); load it
   before changing `tui/`. Its two rules that bit this codebase already: never
@@ -208,11 +210,12 @@ shellcheck -s bash -x -e SC1090,SC1091 install.sh $(find lib tests kickstart -na
 tests/check_action_pins.sh                         # every action pinned to a SHA
 shfmt -d -i 2 -ci install.sh lib tests kickstart   # 2-space indent, case-indent
 kickstart/validate-kickstart.sh                    # rejects unsafe ks defaults
-for t in tests/*_test.sh; do "$t"; done             # 19 files: helpers, pkg, arg_parse,
+for t in tests/*_test.sh; do "$t"; done             # 20 files: helpers, pkg, arg_parse,
                                                      # stage_resolution, finalize_guard, locking,
                                                      # lock_concurrency, marker_invalidation,
                                                      # failure_recovery, exit_handler_scope,
-                                                     # action_pins, tui_launcher, plan, and one per
+                                                     # action_pins, tui_launcher, plan, events,
+                                                     # and one per
                                                      # stage (config, preflight, repos,
                                                      # packaging, services, extras)
 ```

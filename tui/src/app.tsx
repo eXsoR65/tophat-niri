@@ -14,6 +14,7 @@ import { latestLog, resolvePaths } from "./paths.ts";
 import { startInstall, type Engine } from "./engine.ts";
 import { FLAG_LABELS, ROWS } from "./rows.ts";
 import { dependencies, fetchPlan, loadRemovals } from "./planner.ts";
+import { readEvents, reduceEvents, stateGlyph, type InstallerEvent } from "./events.ts";
 import { keyAction, moveCursor } from "./keys.ts";
 import { readdirSync, readFileSync } from "node:fs";
 
@@ -29,6 +30,7 @@ export type AppProps = {
   startEngine?: (config: Config) => Engine | null;
   initialPlan?: StageName[];
   initialRemovals?: string[];
+  initialEvents?: InstallerEvent[];
   loadPlan?: (config: Config) => Promise<StageName[]>;
 };
 
@@ -41,6 +43,7 @@ export function App({
   startEngine,
   initialPlan = [],
   initialRemovals,
+  initialEvents = [],
   loadPlan,
 }: AppProps) {
   const renderer = useRenderer();
@@ -55,6 +58,7 @@ export function App({
   const [exitCode, setExitCode] = useState<number | null>(initialExitCode);
   const [elapsed, setElapsed] = useState(0);
   const [plan, setPlan] = useState<StageName[]>(initialPlan);
+  const [events, setEvents] = useState<InstallerEvent[]>(initialEvents);
   const [removals, setRemovals] = useState<string[]>(initialRemovals ?? []);
 
   const engineRef = useRef<Engine | null>(null);
@@ -80,7 +84,14 @@ export function App({
       } catch {
         // State dir absent until the first stage completes.
       }
-      setElapsed(Math.max(0, Math.round((Date.now() - startedAtRef.current) / 1000)));
+      // Structured events, when the installer is writing them, drive the board.
+      // An empty read must not wipe what is already there: the file is truncated
+      // at run start, so "" is a normal transient rather than "no events".
+      const fromFile = readEvents(enginePaths);
+      if (fromFile.length > 0) setEvents(fromFile);
+      setElapsed(
+        startedAtRef.current === 0 ? 0 : Math.max(0, Math.round((Date.now() - startedAtRef.current) / 1000)),
+      );
     };
 
     tick();
@@ -222,17 +233,34 @@ export function App({
   }
 
   if (screen === "run") {
+    const board = reduceEvents(events);
+    // Events are richer, but markers work on their own: fall back when a run
+    // was started by something other than this TUI.
+    const usingEvents = events.length > 0;
+
     return (
       <box style={{ flexDirection: "column", padding: 1, gap: 1 }}>
-        <text fg="#00b0ff">Tophat - installing</text>
-        <text>
-          {STAGES.map((stage, index) => (
-            <span key={stage} fg={done.has(stage) ? "green" : "gray"}>
-              {`${done.has(stage) ? "[x]" : "[ ]"} ${stage}`}
-              {index < STAGES.length - 1 ? "   " : ""}
-            </span>
-          ))}
+        <text fg={board.failed ? "red" : "#00b0ff"}>
+          {board.failed ? "Tophat - failed" : "Tophat - installing"}
         </text>
+        <box style={{ flexDirection: "column" }}>
+          {STAGES.map((stage) => {
+            const state = usingEvents
+              ? (board.states.get(stage) ?? "pending")
+              : done.has(stage)
+                ? "done"
+                : "pending";
+            const { glyph, colour } = stateGlyph(state);
+            const seconds = board.durations.get(stage);
+            return (
+              <text key={stage} fg={colour}>
+                {glyph} {stage}
+                {seconds === undefined ? "" : ` (${seconds}s)`}
+              </text>
+            );
+          })}
+        </box>
+        {board.currentCommand ? <text fg="#888888">now: {board.currentCommand}</text> : null}
         <text fg="#888888">
           {elapsed}s elapsed{config.dryRun ? "  (dry run)" : ""}
         </text>

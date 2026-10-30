@@ -49,6 +49,29 @@ describe("App", () => {
     expect(frame).toContain("[ ] packaging");
   });
 
+  test("run screen renders the event board when events exist", async () => {
+    const events = [
+      { event: "stage_start", at: 1, stage: "preflight" },
+      { event: "command", at: 2, stage: "preflight", desc: "dnf upgrade" },
+      { event: "stage_done", at: 3, stage: "preflight", seconds: "12" },
+      { event: "stage_start", at: 4, stage: "repos" },
+      { event: "command", at: 5, stage: "repos", desc: "dnf makecache" },
+    ];
+    const frame = await frameOf(<App initialScreen="run" initialEvents={events} />);
+
+    expect(frame).toContain("[x] preflight (12s)");
+    expect(frame).toContain("[>] repos");
+    // The current command is the *running* stage's, not the last one seen.
+    expect(frame).toContain("now: dnf makecache");
+    expect(frame).toContain("[ ] packaging");
+  });
+
+  test("run screen falls back to markers without events", async () => {
+    const frame = await frameOf(<App initialScreen="run" initialDone={["repos"]} />);
+    expect(frame).toContain("[x] repos");
+    expect(frame).toContain("[ ] preflight");
+  });
+
   test("done screen reports success and marker count", async () => {
     const frame = await frameOf(
       <App initialScreen="done" initialExitCode={0} initialDone={["preflight", "repos"]} />,

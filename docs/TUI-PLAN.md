@@ -1,6 +1,6 @@
 # Tophat TUI Plan
 
-Status: **M1 and M2 implemented** (M3–M5 planned)
+Status: **M1–M3 implemented** (M4–M5 planned)
 Frontend stack: [OpenTUI](https://opentui.com) + React bindings + Bun
 Tracking: this document (not `docs/TODO.md` — Phases 1–4 there are done)
 
@@ -112,9 +112,19 @@ was already guarded — but they will catch new ones.
   and conflating the two would make the selection unreadable.
   The accept-removals row previews `packages/remove-replaced.packages`
   ("Removes 9: mako, waybar, ...").
-- [ ] **M3 — Structured events.** NDJSON protocol (above); per-stage status
-  board (pending/running/done/failed/skipped) with durations; current-command
-  line.
+- [x] **M3 — Structured events.** Done 2026-10-30.
+  With `TOPHAT_TUI=1` the installer appends NDJSON to
+  `$SETUP_STATE_DIR/events.ndjson`: `stage_start`, `stage_done` (with seconds),
+  `stage_skipped`, `stage_fail`, `command`, `marker`. The stream is truncated at
+  the start of each run, so a rerun never inherits stale events, and nothing is
+  written for a plain CLI run. Emitted with string substitution and an append —
+  no jq, no python.
+  `tests/events_test.sh` pins the contract (valid JSON, the event types the TUI
+  renders, quotes/backslashes/tabs escaped rather than splitting a line, silent
+  unless `TOPHAT_TUI=1`). The run screen draws a vertical board from
+  `reduceEvents` — `[x] preflight (12s)`, `[>] repos`, `[!] packaging` — with the
+  current command underneath, and falls back to `stage-*.done` markers when no
+  event stream exists (a run started by something other than the TUI).
 - [ ] **M4 — Distribution.** `bun build --compile` standalone binary
   (x86_64 + aarch64), published to GitHub Releases by a workflow, versioned
   with `VERSION`. `./tophat` fetches the matching binary to a cache dir when

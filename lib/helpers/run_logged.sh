@@ -47,6 +47,7 @@ log_ok() { _log_write "OK" "$1"; }
 # v1-compatible error_exit
 error_exit() {
   log_error "$1"
+  event_emit stage_fail stage="${CURRENT_STAGE:-}" reason="$1"
   exit 1
 }
 
@@ -60,6 +61,7 @@ run_logged() {
   local start_time end_time duration
 
   log_info "$description"
+  event_emit command desc="$description" stage="${CURRENT_STAGE:-}"
 
   if [[ "$DRY_RUN" == true ]]; then
     echo -e "  ${CLR_YELLOW}[DRY-RUN]${CLR_RESET} $cmd_str"
@@ -88,8 +90,58 @@ run_logged() {
     log_error "$description FAILED (exit $exit_code, ${duration}s)"
     log_error "Command: $cmd_str"
     log_error "Check full log: $SETUP_LOG"
+    event_emit stage_fail stage="${CURRENT_STAGE:-}" reason="$description" exit="$exit_code"
     exit "$exit_code"
   fi
+}
+
+# -----------------------------------------------------------------------------
+# Structured events (for the TUI)
+# -----------------------------------------------------------------------------
+# With TOPHAT_TUI=1 the installer appends one JSON object per line to
+# $SETUP_STATE_DIR/events.ndjson, so a front end can render a stage board
+# without parsing the human log. Deliberately dependency-free: string
+# substitutions and an append, no jq and no python.
+
+_json_escape() {
+  local s="$1"
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\n'/\\n}
+  s=${s//$'\t'/\\t}
+  s=${s//$'\r'/\\r}
+  printf '%s' "$s"
+}
+
+tophat_events_file() {
+  printf '%s/events.ndjson' "$SETUP_STATE_DIR"
+}
+
+# Start a clean event stream for this run.
+tophat_events_reset() {
+  [[ "${TOPHAT_TUI:-0}" == 1 ]] || return 0
+  mkdir -p "$SETUP_STATE_DIR" 2>/dev/null || return 0
+  : >"$(tophat_events_file)" 2>/dev/null || true
+}
+
+# event_emit <type> [key=value ...]
+event_emit() {
+  [[ "${TOPHAT_TUI:-0}" == 1 ]] || return 0
+
+  local type="$1"
+  shift
+  local line pair key value
+  line="{\"event\":\"$(_json_escape "$type")\",\"at\":${EPOCHSECONDS:-$(date +%s)}"
+
+  for pair in "$@"; do
+    key="${pair%%=*}"
+    value="${pair#*=}"
+    line+=",\"$(_json_escape "$key")\":\"$(_json_escape "$value")\""
+  done
+  line+="}"
+
+  mkdir -p "$SETUP_STATE_DIR" 2>/dev/null || return 0
+  printf '%s\n' "$line" >>"$(tophat_events_file)" 2>/dev/null || true
 }
 
 # -----------------------------------------------------------------------------
@@ -98,6 +150,7 @@ run_logged() {
 log_stage_start() {
   CURRENT_STAGE="$1"
   _log_write "STAGE" "▶ Starting stage: $CURRENT_STAGE"
+  event_emit stage_start stage="$CURRENT_STAGE"
   STAGE_STATUS[$CURRENT_STAGE]="running"
   STAGE_DURATIONS[$CURRENT_STAGE]=$(date +%s)
 }
@@ -116,6 +169,7 @@ log_stage_complete() {
   STAGE_DURATIONS[$stage]=$elapsed
 
   _log_write "STAGE" "✓ Completed stage: $stage (${elapsed}s)"
+  event_emit stage_done stage="$stage" seconds="$elapsed"
 
   if [[ "$DRY_RUN" != true ]]; then
     stage_marker_write "$stage"
@@ -162,6 +216,7 @@ stage_marker_write() {
     printf 'user=%s\n' "${TARGET_USER:-unknown}"
   } >"$SETUP_STATE_DIR/stage-${stage}.done"
   _tophat_config_snapshot >"$SETUP_STATE_DIR/stage-${stage}.config"
+  event_emit marker stage="$stage"
 }
 
 _marker_field() {
@@ -222,6 +277,7 @@ skip_stage() {
   local stage="$1"
   local reason="$2"
   STAGE_STATUS[$stage]="skipped"
+  event_emit stage_skipped stage="$stage" reason="$reason"
   STAGE_DURATIONS[$stage]=0
   log_info "$reason"
 }

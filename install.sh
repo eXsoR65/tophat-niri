@@ -166,6 +166,9 @@ main() {
   source "$SETUP_LIB/helpers/all.sh"
   log_ok "Helpers loaded"
 
+  # A rerun must not inherit the previous run's event stream.
+  tophat_events_reset
+
   # One installer at a time: concurrent runs would fight over the same markers,
   # logs and package-manager lock. Dry runs change nothing, so they may overlap.
   if [[ "$DRY_RUN" != true ]]; then
