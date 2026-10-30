@@ -65,6 +65,25 @@ Phase 2/3 work already solves the TUI's hardest problems:
 The TUI also **passes stdin from `/dev/null`** to the installer so nothing can
 block on input even if a prompt slips through.
 
+## Scaffold provenance
+
+`tui/` was regenerated from `bunx create-tui@latest -t react` on 2026-10-30, so
+the config files are the generator's rather than hand-written. Two deliberate
+deviations, both recorded here because re-running the generator would undo them:
+
+- **`types: ["bun"]` added to `tsconfig.json`.** The template's demo imports
+  neither Node builtins nor `bun:test`, so it omits the field; this project uses
+  `node:fs`, `node:child_process` and `bun:test`.
+- **Dependencies stay on the installed versions** (`@opentui/*` 0.8.0,
+  React 19.3) rather than the template's pinned 0.7.0. The generator lags the
+  library, and the tests target 0.8.0.
+
+Everything else is the template: `module: Preserve`, `moduleDetection: force`,
+`verbatimModuleSyntax`, `noUncheckedIndexedAccess`, `noFallthroughCasesInSwitch`,
+`noImplicitOverride`, a project-local `.gitignore`, the `dev`/`typecheck`
+scripts and `engines.bun`. The stricter flags found no defects — the row lookup
+was already guarded — but they will catch new ones.
+
 ## Milestones
 
 - [x] **M1 — Scaffold + simple flow.** Done 2026-10-30. `tui/` Bun project with
