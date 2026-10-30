@@ -124,6 +124,15 @@ profile):
 ./tophat --diagnose               # what was found, and what would happen
 ```
 
+`--install-runtime` runs the documented command and nothing else:
+
+```bash
+curl -fsSL https://bun.sh/install | bash
+```
+
+so Bun lands in `~/.bun`, on your `PATH` as upstream describes, and is upgraded
+with `bun upgrade`.
+
 `./tophat` looks for Bun only where that installer leaves it: `$TOPHAT_BUN` (an
 escape hatch), `bun` on `PATH`, then `~/.bun/bin/bun` for the current shell
 before your profile is reloaded. If you already have Bun from a package manager,

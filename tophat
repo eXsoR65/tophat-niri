@@ -122,16 +122,13 @@ decide() {
   printf 'tui'
 }
 
-# Bun is installed the way its documentation says: the official installer,
-# unmodified, with its default location (~/.bun). No private directory, no
-# overridden BUN_INSTALL.
+# Installed with the documented command, verbatim. The script decides where Bun
+# lives (~/.bun), what it puts on PATH, and what it verifies; we neither copy its
+# logic nor override its choices. `set -o pipefail` makes a failed download fail
+# the install rather than running bash on an empty pipe.
 install_runtime() {
-  local installer
-  printf 'Installing Bun with its official installer (https://bun.sh/install)\n' >&2
-  installer="$(mktemp)"
-  curl -fsSL https://bun.sh/install -o "$installer"
-  bash "$installer" >&2
-  rm -f "$installer"
+  printf 'Installing Bun: curl -fsSL https://bun.sh/install | bash\n' >&2
+  curl -fsSL https://bun.sh/install | bash
   printf 'Bun installed; keep it patched with: bun upgrade\n' >&2
 }
 
