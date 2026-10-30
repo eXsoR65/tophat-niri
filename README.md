@@ -110,8 +110,21 @@ options, start, watch the log and the stage markers, then reboot if it worked.
 ./tophat --no-tui     # always the plain installer
 ```
 
-The TUI is strictly optional. It needs [Bun](https://bun.sh) and its
-dependencies installed once:
+The TUI is strictly optional. It needs [Bun](https://bun.sh), which `./tophat`
+offers to install on first use into a Tophat-managed directory
+(`/var/lib/tophat/bun` when run as root, `~/.local/share/tophat/bun` otherwise):
+
+```bash
+sudo ./tophat --install-runtime   # non-interactive: provision Bun, then start
+./tophat --diagnose               # what was found, and what would happen
+```
+
+The runtime is **not** shipped as a compiled binary on purpose: that would freeze
+a Bun inside each release, and a runtime security fix would then wait on a new
+Tophat release instead of reaching you through `bun upgrade` (or `dnf upgrade`,
+if Bun comes from a package). The TUI shows the running version so a stale
+runtime is visible. Dependencies for the TUI's own packages still come from the
+checkout:
 
 ```bash
 cd tui && bun install

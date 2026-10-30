@@ -2,14 +2,20 @@
 # =============================================================================
 #  tophat — run the TUI when it is usable, otherwise run install.sh
 #
-#  The TUI is strictly additive. Anything at all unusual (no Bun, no deps, not a
-#  terminal, arguments given, --no-tui) falls back to the Bash installer, so this
-#  launcher can never be the reason an install cannot run.
+#  The TUI is strictly additive. Anything unusual (no runtime, no dependencies,
+#  not a terminal, arguments given, --no-tui) falls back to the Bash installer,
+#  so this launcher can never be the reason an install cannot run.
+#
+#  The runtime is *provisioned*, never embedded: a compiled binary would freeze
+#  Bun inside it, and a runtime CVE would then wait on our release cadence
+#  rather than Bun's. Bun is looked up first and installed only on request.
 #
 #  Usage:
-#    ./tophat                 TUI when possible, else install.sh
-#    ./tophat --no-tui [...]  always install.sh
-#    ./tophat [options...]    arguments are passed to install.sh
+#    ./tophat                      TUI when possible, else install.sh
+#    ./tophat --no-tui [opts...]   always install.sh
+#    ./tophat --install-runtime    install Bun into a managed dir, then start
+#    ./tophat --diagnose           report what was found and what would happen
+#    ./tophat [options...]         arguments are passed to install.sh
 # =============================================================================
 set -euo pipefail
 
@@ -19,26 +25,140 @@ TUI_ENTRY="$ROOT/tui/src/index.tsx"
 
 args=()
 use_tui=true
+install_runtime=false
+diagnose=false
+
 for arg in "$@"; do
   case "$arg" in
     --no-tui) use_tui=false ;;
+    --install-runtime) install_runtime=true ;;
+    --diagnose) diagnose=true ;;
     *) args+=("$arg") ;;
   esac
 done
-
-# Explicit arguments (other than --no-tui) mean the caller knows what they want:
-# hand them to the installer rather than second-guessing them in a form.
 ((${#args[@]} == 0)) || use_tui=false
+
+is_root() { [[ ${EUID:-$(id -u)} -eq 0 ]]; }
+
+# Where a runtime installed by this launcher lives.
+runtime_dir() {
+  if [[ -n "${TOPHAT_BUN_DIR:-}" ]]; then
+    printf '%s' "$TOPHAT_BUN_DIR"
+  elif is_root; then
+    printf '%s' "/var/lib/tophat/bun"
+  else
+    printf '%s/.local/share/tophat/bun' "${HOME:-/root}"
+  fi
+}
+
+has_deps() { [[ -d "$ROOT/tui/node_modules/@opentui" ]]; }
+
+# An explicit override, then whatever the system provides (a packaged Bun, or
+# the official installer's default location), then our own managed copy.
+find_bun() {
+  local candidate
+
+  if [[ -n "${TOPHAT_BUN:-}" && -x "${TOPHAT_BUN}" ]]; then
+    printf '%s' "$TOPHAT_BUN"
+    return 0
+  fi
+  if candidate="$(command -v bun 2>/dev/null)" && [[ -n "$candidate" ]]; then
+    printf '%s' "$candidate"
+    return 0
+  fi
+  candidate="$(runtime_dir)/bin/bun"
+  if [[ -x "$candidate" ]]; then
+    printf '%s' "$candidate"
+    return 0
+  fi
+  candidate="${HOME:-/root}/.bun/bin/bun"
+  if [[ -x "$candidate" ]]; then
+    printf '%s' "$candidate"
+    return 0
+  fi
+  return 1
+}
+
+# tui | needs-runtime | fallback
+decide() {
+  if [[ "$use_tui" != true ]]; then
+    printf 'fallback'
+    return
+  fi
+  if ! [[ -t 0 && -t 1 ]]; then
+    printf 'fallback'
+    return
+  fi
+  if ! has_deps; then
+    printf 'fallback'
+    return
+  fi
+  if ! find_bun >/dev/null 2>&1; then
+    printf 'needs-runtime'
+    return
+  fi
+  printf 'tui'
+}
+
+install_runtime() {
+  local dir installer
+  dir="$(runtime_dir)"
+  mkdir -p "$dir"
+  printf 'Installing Bun into %s (official installer: https://bun.sh/install)\n' "$dir" >&2
+  installer="$(mktemp)"
+  curl -fsSL https://bun.sh/install -o "$installer"
+  BUN_INSTALL="$dir" bash "$installer" >&2
+  rm -f "$installer"
+}
 
 fallback() {
   exec bash "$INSTALL" "$@"
 }
 
-[[ "$use_tui" == true ]] || fallback "${args[@]}"
-# A TUI needs a terminal on both ends; under sudo -n, cron or a pipe it has none.
-[[ -t 0 && -t 1 ]] || fallback "${args[@]}"
-command -v bun >/dev/null 2>&1 || fallback "${args[@]}"
-[[ -f "$TUI_ENTRY" ]] || fallback "${args[@]}"
-[[ -d "$ROOT/tui/node_modules/@opentui" ]] || fallback "${args[@]}"
+if [[ "$diagnose" == true ]]; then
+  bun_path="$(find_bun || true)"
+  printf 'root=%s\n' "$ROOT"
+  printf 'install=%s\n' "$INSTALL"
+  printf 'tui_entry=%s\n' "$TUI_ENTRY"
+  printf 'deps=%s\n' "$(has_deps && echo yes || echo no)"
+  printf 'bun=%s\n' "${bun_path:-none}"
+  printf 'runtime_dir=%s\n' "$(runtime_dir)"
+  printf 'tty=%s\n' "$([[ -t 0 && -t 1 ]] && echo yes || echo no)"
+  printf 'decision=%s\n' "$(decide)"
+  exit 0
+fi
 
-exec bun "$TUI_ENTRY" "${args[@]}"
+case "$(decide)" in
+  tui)
+    exec "$(find_bun)" "$TUI_ENTRY" "${args[@]}"
+    ;;
+  needs-runtime)
+    if [[ "$install_runtime" == true ]]; then
+      install_runtime
+    else
+      dir="$(runtime_dir)"
+      printf 'The TUI needs Bun, which is not installed.\n' >&2
+      printf 'Install it into %s now? [y/N] ' "$dir" >&2
+      answer=""
+      read -r answer || answer=""
+      case "$answer" in
+        y | Y | yes | YES) install_runtime ;;
+        *)
+          printf 'Falling back to the Bash installer. Use --no-tui to skip this prompt, or --install-runtime to automate it.\n' >&2
+          fallback "${args[@]}"
+          ;;
+      esac
+    fi
+    if ! bun_path="$(find_bun)"; then
+      printf 'Bun installation finished but no runtime was found; falling back.\n' >&2
+      fallback "${args[@]}"
+    fi
+    exec "$bun_path" "$TUI_ENTRY" "${args[@]}"
+    ;;
+  *)
+    if [[ "$use_tui" == true ]] && ! has_deps; then
+      printf 'TUI dependencies are missing (cd tui && bun install); using install.sh.\n' >&2
+    fi
+    fallback "${args[@]}"
+    ;;
+esac

@@ -25,6 +25,8 @@ describe("App", () => {
     }
     expect(frame).toContain("Start install");
     expect(frame).toContain("All stages selected");
+    // The runtime is provisioned, not embedded, so its version is on screen.
+    expect(frame).toMatch(/runtime: bun \d+\.\d+/);
   });
 
   test("config screen reflects a selection", async () => {

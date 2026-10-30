@@ -63,4 +63,41 @@ if TOPHAT_ROOT="$empty" "$launcher" --no-tui >/dev/null 2>&1; then
   fail "launcher reported success with no install.sh present"
 fi
 
+# --- diagnose explains the decision without a terminal ---------------------
+fake_full="$tmp_dir/full"
+mkdir -p "$fake_full/tui/src" "$fake_full/tui/node_modules/@opentui"
+cp "$fake/install.sh" "$fake_full/install.sh"
+
+out="$(TOPHAT_ROOT="$fake_full" "$launcher" --diagnose)"
+grep -qx 'deps=yes' <<<"$out" || fail "diagnose did not report deps: ${out}"
+grep -qx 'bun=none' <<<"$out" || fail "diagnose found a Bun that is not there (PATH order changed?)"
+grep -qx 'tty=no' <<<"$out" || fail "diagnose did not report a non-terminal"
+grep -qx 'decision=fallback' <<<"$out" || fail "non-terminal decision should be fallback: ${out}"
+
+# An explicit override is honoured.
+fake_bun="$tmp_dir/fakebun"
+printf '#!/bin/bash\nprintf "fake bun\\n"\n' >"$fake_bun"
+chmod +x "$fake_bun"
+out="$(TOPHAT_ROOT="$fake_full" TOPHAT_BUN="$fake_bun" "$launcher" --diagnose)"
+grep -qx "bun=$fake_bun" <<<"$out" || fail "TOPHAT_BUN override ignored: ${out}"
+
+# Missing dependencies are reported rather than guessed at.
+fake_bare="$tmp_dir/bare"
+mkdir -p "$fake_bare/tui/src"
+cp "$fake/install.sh" "$fake_bare/install.sh"
+out="$(TOPHAT_ROOT="$fake_bare" TOPHAT_BUN="$fake_bun" "$launcher" --diagnose)"
+grep -qx 'deps=no' <<<"$out" || fail "missing dependencies not reported: ${out}"
+
+# --- provisioning is opt-in: no terminal means no network, no install ------
+# curl is replaced by a trap that fails the test if it is ever called.
+mkdir -p "$tmp_dir/bin"
+cat >"$tmp_dir/bin/curl" <<'CURL'
+#!/bin/bash
+echo "curl must not be called without a terminal" >&2
+exit 99
+CURL
+chmod +x "$tmp_dir/bin/curl"
+out="$(PATH="$tmp_dir/bin:$PATH" TOPHAT_ROOT="$fake_full" "$launcher" --install-runtime)"
+[[ "$out" == "install.sh args: " ]] || fail "--install-runtime should still fall back without a terminal: '${out}'"
+
 echo "tui_launcher_test.sh: PASS"

@@ -125,10 +125,31 @@ was already guarded — but they will catch new ones.
   `reduceEvents` — `[x] preflight (12s)`, `[>] repos`, `[!] packaging` — with the
   current command underneath, and falls back to `stage-*.done` markers when no
   event stream exists (a run started by something other than the TUI).
-- [ ] **M4 — Distribution.** `bun build --compile` standalone binary
-  (x86_64 + aarch64), published to GitHub Releases by a workflow, versioned
-  with `VERSION`. `./tophat` fetches the matching binary to a cache dir when
-  missing and online; verifies checksum; falls back to plain install offline.
+- [ ] **M4 — Runtime provisioning (revised).** Originally: `bun build --compile`
+  and ship a binary per architecture. **Rejected on security grounds.** A
+  compiled binary embeds a frozen Bun: a CVE in the runtime would only reach
+  users when we rebuild and re-publish, so the fix cadence would be our release
+  cadence, not Bun's. The TUI is a convenience layer; it should not be the part
+  of Tophat that ages worst.
+
+  Instead the launcher provisions a *runtime* and runs the sources from the
+  checkout:
+
+  - look for Bun in this order: `--bun`/`TOPHAT_BUN` override, `PATH`
+    (`dnf install bun` from a COPR, or a distro package if one ever ships),
+    Tophat's own managed directory, then `~/.bun/bin/bun`;
+  - if absent, offer to install it once, into a Tophat-managed directory
+    (`/var/lib/tophat/bun` when root, `~/.local/share/tophat/bun` otherwise) via
+    Bun's official installer, and say where it went;
+  - never install silently: `--install-runtime` does it non-interactively, and
+    declining falls back to `install.sh` exactly as before.
+
+  Consequence, stated plainly: updates are the user's to apply (`dnf upgrade`
+  for a packaged Bun, `bun upgrade` for ours). The TUI shows the running
+  runtime version so a stale one is visible rather than silent. No binaries in
+  Releases, nothing to re-cut when Bun patches something.
+  `./tophat --diagnose` reports what was found and what the launcher would do,
+  which is also how the tests exercise the decision without a terminal.
 - [ ] **M5 — Polish.** Error recovery (retry failed stage / open log / abort),
   resume-from-markers UI, theme, keybinding help footer.
 

@@ -20,6 +20,10 @@ import { readdirSync, readFileSync } from "node:fs";
 
 export type Screen = "config" | "run" | "done";
 
+// The runtime is provisioned by ./tophat rather than shipped inside a binary, so
+// which version is running is worth showing: updates are the user's to apply.
+const RUNTIME = typeof Bun !== "undefined" ? `bun ${Bun.version}` : "unknown";
+
 export type AppProps = {
   initialScreen?: Screen;
   initialConfig?: Config;
@@ -227,7 +231,9 @@ export function App({
               : "No replacement list found"}
           </text>
         ) : null}
-        <text fg="#555555">space toggle   enter start   q quit</text>
+        <text fg="#555555">
+          space toggle   enter start   q quit   runtime: {RUNTIME}
+        </text>
       </box>
     );
   }

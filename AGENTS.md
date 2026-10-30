@@ -143,10 +143,15 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
     `run_logged.sh` — including the `trap ... 0` spelling, and including
     `install.sh`.
 
-11. **The TUI is additive**: `./tophat` must fall back to `install.sh` whenever
-    anything is missing or unusual (no Bun, no `tui/node_modules`, non-TTY,
-    arguments given, `--no-tui`). `tests/tui_launcher_test.sh` asserts those
-    fallbacks; the launcher must never be a prerequisite for installing.
+11. **The TUI is additive, and its runtime is provisioned**: `./tophat` must
+    fall back to `install.sh` whenever anything is missing or unusual (no Bun,
+    no `tui/node_modules`, non-TTY, arguments given, `--no-tui`).
+    `tests/tui_launcher_test.sh` asserts those fallbacks; the launcher must never
+    be a prerequisite for installing. The runtime is **never shipped as a
+    compiled binary**: that would freeze Bun inside the release and tie runtime
+    security fixes to our release cadence. Bun is looked up (override, `PATH`,
+    managed dir, `~/.bun`), installed only on request (`--install-runtime` or a
+    prompt) into a managed directory, and its version is displayed.
 
 ## Known quirks / rough edges
 
@@ -182,7 +187,8 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
   `docs/TUI-PLAN.md`. M1–M3 are in the tree: `tui/` (Bun project), `./tophat`
   launcher with a Bash fallback, a separate `tui` CI job, the resolved-plan and
   dependency preview driven by `install.sh --print-plan`, and the stage board
-  fed by the NDJSON event stream. M4–M5 are not started. **The Bash installer remains the only engine**: the TUI builds
+  fed by the NDJSON event stream. M4's runtime provisioning is implemented
+  (`--install-runtime`, `--diagnose`); M5 is not started. **The Bash installer remains the only engine**: the TUI builds
   argv, spawns `install.sh`, and reads `$SETUP_LOG` plus the stage markers; it
   must never reimplement installer logic: the stage plan comes from
   `install.sh --print-plan`, never from a copy of `STAGE_DEPENDENCIES`, and
