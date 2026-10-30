@@ -26,6 +26,8 @@ fail() {
 step '1/7 bash syntax'
 find . -path ./.git -prune -o -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n || fail 'bash -n'
 bash -n install.sh || fail 'install.sh syntax'
+python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read())' \
+  tests/check_action_pins.py || fail 'python syntax'
 
 step '2/7 shellcheck'
 mapfile -t shell_files < <(find lib tests kickstart -type f -name '*.sh' | sort)

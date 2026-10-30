@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import re
 import sys
+from itertools import chain
 from pathlib import Path
 
 try:
@@ -32,16 +33,31 @@ except ImportError:  # pragma: no cover - reported by the shell wrapper too
 PINNED = re.compile(r"^[^\s@]+@[0-9a-f]{40}$")
 
 
-def uses_values(node):
-    """Yield every `uses:` value anywhere in the document."""
-    if isinstance(node, dict):
-        for key, value in node.items():
-            if key == "uses":
-                yield value
-            yield from uses_values(value)
-    elif isinstance(node, list):
-        for item in node:
-            yield from uses_values(item)
+def action_refs(document):
+    """Yield (location, value) for every node that executes an action.
+
+    GitHub allows `uses` in exactly two places: a job (a reusable workflow call)
+    and a step (an action). Walking every mapping instead would treat an input or
+    environment variable that happens to be named `uses` as an action reference -
+    `env: {uses: staging}` is not something to pin.
+    """
+    jobs = document.get("jobs") if isinstance(document, dict) else None
+    if not isinstance(jobs, dict):
+        return
+
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+
+        if "uses" in job:
+            yield f"jobs.{job_name}.uses", job["uses"]
+
+        steps = job.get("steps")
+        if not isinstance(steps, list):
+            continue
+        for index, step in enumerate(steps):
+            if isinstance(step, dict) and "uses" in step:
+                yield f"jobs.{job_name}.steps[{index}].uses", step["uses"]
 
 
 def is_allowed(ref: object) -> bool:
@@ -55,31 +71,61 @@ def is_allowed(ref: object) -> bool:
     return bool(PINNED.match(ref))
 
 
+def action_files(root: Path) -> list[Path]:
+    """Workflow files, plus any composite action metadata in the tree.
+
+    Composite actions (`action.yml` anywhere) also execute other actions in
+    `runs.steps[].uses`, so a workflow-only scan would miss them the day one is
+    added.
+    """
+    files = sorted(root.glob(".github/workflows/*.yml"))
+    files += sorted(root.glob(".github/workflows/*.yaml"))
+    for pattern in ("action.yml", "action.yaml"):
+        files += sorted(
+            path
+            for path in root.glob(f"**/{pattern}")
+            if ".git/" not in path.as_posix() and "node_modules/" not in path.as_posix()
+        )
+    return files
+
+
+def composite_refs(document):
+    """Yield references inside a composite action's `runs.steps[]`."""
+    runs = document.get("runs") if isinstance(document, dict) else None
+    steps = runs.get("steps") if isinstance(runs, dict) else None
+    if not isinstance(steps, list):
+        return
+    for index, step in enumerate(steps):
+        if isinstance(step, dict) and "uses" in step:
+            yield f"runs.steps[{index}].uses", step["uses"]
+
+
 def main(argv: list[str]) -> int:
     root = Path(argv[1]) if len(argv) > 1 else Path(__file__).resolve().parent.parent
-    workflows = sorted(root.glob(".github/workflows/*.yml")) + sorted(
-        root.glob(".github/workflows/*.yaml")
-    )
+    workflows = action_files(root)
 
-    if not workflows:
+    if not any(".github/workflows/" in path.as_posix() for path in workflows):
         print(f"FAIL: no workflow files found under {root}/.github/workflows", file=sys.stderr)
         return 1
 
-    bad: list[tuple[Path, object]] = []
+    bad: list[tuple[Path, str, object]] = []
     total = 0
 
     for path in workflows:
         try:
             documents = list(yaml.safe_load_all(path.read_text()))
+        except OSError as exc:
+            print(f"FAIL: cannot read {path}: {exc}", file=sys.stderr)
+            return 1
         except yaml.YAMLError as exc:
             print(f"FAIL: cannot parse {path}: {exc}", file=sys.stderr)
             return 1
 
         for document in documents:
-            for ref in uses_values(document):
+            for location, ref in chain(action_refs(document), composite_refs(document)):
                 total += 1
                 if not is_allowed(ref):
-                    bad.append((path, ref))
+                    bad.append((path, location, ref))
 
     if bad:
         print(
@@ -87,11 +133,11 @@ def main(argv: list[str]) -> int:
             "(40-character commit SHA, or a docker digest):",
             file=sys.stderr,
         )
-        for path, ref in bad:
-            print(f"  {path}: {ref}", file=sys.stderr)
+        for path, location, ref in bad:
+            print(f"  {path}: {location}: {ref}", file=sys.stderr)
         return 1
 
-    print(f"check_action_pins.sh: PASS ({len(workflows)} workflow file(s), {total} reference(s))")
+    print(f"check_action_pins.sh: PASS ({len(workflows)} action file(s), {total} reference(s))")
     return 0
 
 

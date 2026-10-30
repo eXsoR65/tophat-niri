@@ -39,6 +39,9 @@ jobs:
         run: |
           find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
           bash -n install.sh
+          # The one Python file: the same idea as bash -n.
+          python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read())' \
+            tests/check_action_pins.py
 
       - name: ShellCheck
         run: |
@@ -135,6 +138,8 @@ jobs:
           echo '=== Bash syntax ==='
           find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
           bash -n install.sh
+          python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read())' \
+            tests/check_action_pins.py
 
           echo '=== Kickstart validation ==='
           kickstart/validate-kickstart.sh

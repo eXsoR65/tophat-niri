@@ -240,7 +240,10 @@ rather than scanning it line by line — flow mappings, folded scalars, quoted k
 and aliases all defeated the scanner. `tests/action_pins_test.sh` keeps a fixture
 for each of those shapes in both directions, so a new one is a test change rather
 than another review round. Only local actions, digest-pinned images and
-40-character SHAs are accepted.
+40-character SHAs are accepted. Extraction follows the schema rather than every
+mapping: `jobs.<id>.uses` (reusable workflow calls), `jobs.<id>.steps[].uses`, and
+`runs.steps[]` in composite `action.yml` files. A `uses` key anywhere else - an
+input or an environment variable - is not an action and is left alone.
 
 Releases: push an annotated tag `v<version>` matching `VERSION`;
 `.github/workflows/release.yml` re-runs the gates, fails on a VERSION/tag

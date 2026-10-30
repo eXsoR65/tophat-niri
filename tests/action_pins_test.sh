@@ -41,6 +41,27 @@ expect_fail() {
   [[ "$out" == *"$want"* ]] || fail "expected '${want}' in output for ${name}, got: ${out}"
 }
 
+# expect_pass_at <name> <relative path> <body>
+expect_pass_at() {
+  local name="$1" rel="$2" body="$3" dir="$tmp_dir/pass-$1"
+  mkdir -p "$dir/$(dirname "$rel")" "$dir/.github/workflows"
+  printf 'jobs:\n  a:\n    steps:\n      - run: echo ok\n' >"$dir/.github/workflows/noop.yml"
+  printf '%s\n' "$body" >"$dir/$rel"
+  "$CHECK" "$dir" >/dev/null 2>&1 || fail "expected PASS for ${name}"
+}
+
+# expect_fail_at <name> <relative path> <body> <expected fragment>
+expect_fail_at() {
+  local name="$1" rel="$2" body="$3" want="$4" dir="$tmp_dir/fail-$1" out
+  mkdir -p "$dir/$(dirname "$rel")" "$dir/.github/workflows"
+  printf 'jobs:\n  a:\n    steps:\n      - run: echo ok\n' >"$dir/.github/workflows/noop.yml"
+  printf '%s\n' "$body" >"$dir/$rel"
+  if out="$("$CHECK" "$dir" 2>&1)"; then
+    fail "expected FAIL for ${name}, got PASS"
+  fi
+  [[ "$out" == *"$want"* ]] || fail "expected '${want}' in output for ${name}, got: ${out}"
+}
+
 # --- pinned in each spelling -------------------------------------------------
 expect_pass named w.yml "jobs:
   a:
@@ -178,6 +199,45 @@ expect_fail quoted-key-unpinned w.yml "jobs:
   a:
     steps:
       - \"uses\": actions/checkout@v7" "actions/checkout@v7"
+
+# --- `uses` keys that are not action references ------------------------------
+# An input or environment variable may be named `uses`; only jobs and steps
+# execute anything.
+expect_pass env-named-uses w.yml "jobs:
+  build:
+    env:
+      uses: staging
+    steps:
+      - name: Build
+        run: echo hello"
+
+expect_pass input-named-uses w.yml "jobs:
+  build:
+    steps:
+      - name: Build
+        with:
+          uses: staging
+        run: echo hello"
+
+# --- reusable workflow calls are references too -----------------------------
+expect_pass reusable-pinned w.yml "jobs:
+  ci:
+    uses: eXsoR65/tophat-niri/.github/workflows/ci.yml@${SHA}"
+
+expect_fail reusable-unpinned w.yml "jobs:
+  ci:
+    uses: eXsoR65/tophat-niri/.github/workflows/ci.yml@v2" "jobs.ci.uses"
+
+# --- composite actions execute actions too ----------------------------------
+expect_pass_at composite-pinned .github/actions/thing/action.yml "runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@${SHA}"
+
+expect_fail_at composite-unpinned .github/actions/thing/action.yml "runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v7" "runs.steps[0].uses"
 
 # --- unpinned in each spelling ----------------------------------------------
 expect_fail named w.yml "jobs:
