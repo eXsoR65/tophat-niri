@@ -234,6 +234,7 @@ export function App({
         <text fg="#555555">
           space toggle   enter start   q quit   runtime: {RUNTIME}
         </text>
+        <text fg="#444444">The TUI runs on Bun; keep it patched (bun upgrade, or dnf upgrade if packaged).</text>
       </box>
     );
   }

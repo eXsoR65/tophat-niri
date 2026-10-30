@@ -125,7 +125,7 @@ was already guarded — but they will catch new ones.
   `reduceEvents` — `[x] preflight (12s)`, `[>] repos`, `[!] packaging` — with the
   current command underneath, and falls back to `stage-*.done` markers when no
   event stream exists (a run started by something other than the TUI).
-- [ ] **M4 — Runtime provisioning (revised).** Originally: `bun build --compile`
+- [x] **M4 — Runtime provisioning (revised).** Done 2026-10-30. Originally: `bun build --compile`
   and ship a binary per architecture. **Rejected on security grounds.** A
   compiled binary embeds a frozen Bun: a CVE in the runtime would only reach
   users when we rebuild and re-publish, so the fix cadence would be our release
@@ -150,6 +150,12 @@ was already guarded — but they will catch new ones.
   Releases, nothing to re-cut when Bun patches something.
   `./tophat --diagnose` reports what was found and what the launcher would do,
   which is also how the tests exercise the decision without a terminal.
+
+  **The dependency is stated in four places**, because an undisclosed dependency
+  is a support ticket: the README prerequisites (marked TUI-only), `./tophat
+  --help`, the fallback message when the TUI is skipped for want of Bun, and the
+  TUI's own first screen ("runtime: bun x.y.z" plus a keep-it-patched line).
+  `--diagnose` adds an `update_hint`.
 - [ ] **M5 — Polish.** Error recovery (retry failed stage / open log / abort),
   resume-from-markers UI, theme, keybinding help footer.
 

@@ -22,6 +22,10 @@ workstation using [niri](https://github.com/niri-wm/niri) and [DankMaterialShell
   - Another option is copying and reviewing `kickstart/tophat-minimal.ks.example`.
 - Internet connection
 - Non-root user account created with `sudo` privileges
+- *(Optional TUI only)* [Bun](https://bun.sh). Not needed for `install.sh`;
+  `./tophat` offers to install it on first use, and the TUI shows the running
+  version so you can keep it patched (`bun upgrade`, or `dnf upgrade` if Bun
+  comes from a package). Without it, `./tophat` runs `install.sh`.
 
 > [!WARNING]
 > Only intended to be used with a Fedora Minimal install since it installs/configures

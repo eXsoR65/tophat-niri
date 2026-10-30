@@ -23,6 +23,37 @@ ROOT="${TOPHAT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 INSTALL="$ROOT/install.sh"
 TUI_ENTRY="$ROOT/tui/src/index.tsx"
 
+usage() {
+  cat <<'EOF'
+Usage: ./tophat [OPTIONS] [install.sh options...]
+
+Runs Tophat behind a terminal UI when that is possible, and the plain installer
+otherwise.
+
+Options:
+  --no-tui            Always run install.sh
+  --install-runtime   Install Bun into a managed directory, then start the TUI
+  --diagnose          Report what was found and what would happen
+  --help, -h          Show this message
+
+The TUI needs Bun. It is not bundled: a compiled binary would freeze the
+runtime, so a Bun security fix would wait for a Tophat release instead of
+reaching you through `bun upgrade` (or `dnf upgrade`, if Bun is packaged).
+./tophat looks for Bun in this order:
+
+  1. $TOPHAT_BUN
+  2. bun in $PATH
+  3. the managed directory (see --diagnose)
+  4. ~/.bun/bin/bun
+
+Without a terminal, without the TUI dependencies, or with any other argument,
+this runs install.sh unchanged. install.sh never needs Bun.
+
+Keep the runtime patched: `bun upgrade` for a managed copy, `dnf upgrade` for a
+packaged one. The TUI shows the version it is running on its first screen.
+EOF
+}
+
 args=()
 use_tui=true
 install_runtime=false
@@ -30,6 +61,10 @@ diagnose=false
 
 for arg in "$@"; do
   case "$arg" in
+    --help | -h)
+      usage
+      exit 0
+      ;;
     --no-tui) use_tui=false ;;
     --install-runtime) install_runtime=true ;;
     --diagnose) diagnose=true ;;
@@ -109,6 +144,24 @@ install_runtime() {
   curl -fsSL https://bun.sh/install -o "$installer"
   BUN_INSTALL="$dir" bash "$installer" >&2
   rm -f "$installer"
+  printf 'Bun installed in %s. Keep it patched with: %s/bin/bun upgrade\n' "$dir" "$dir" >&2
+}
+
+explain_fallback() {
+  [[ "$use_tui" == true ]] || return 0
+
+  if ! has_deps; then
+    printf 'TUI dependencies are missing (cd tui && bun install); using install.sh.\n' >&2
+    return 0
+  fi
+  if ! find_bun >/dev/null 2>&1; then
+    printf 'The TUI needs Bun, which is not installed; using install.sh.\n' >&2
+    printf 'Install it with ./tophat --install-runtime, or use --no-tui to silence this.\n' >&2
+    return 0
+  fi
+  if ! [[ -t 0 && -t 1 ]]; then
+    printf 'No terminal attached; using install.sh (run ./tophat in a terminal for the TUI).\n' >&2
+  fi
 }
 
 fallback() {
@@ -125,6 +178,7 @@ if [[ "$diagnose" == true ]]; then
   printf 'runtime_dir=%s\n' "$(runtime_dir)"
   printf 'tty=%s\n' "$([[ -t 0 && -t 1 ]] && echo yes || echo no)"
   printf 'decision=%s\n' "$(decide)"
+  printf 'update_hint=%s\n' "$(find_bun >/dev/null 2>&1 && printf 'keep it patched: bun upgrade (managed) or dnf upgrade (packaged)' || printf 'run --install-runtime to provision it')"
   exit 0
 fi
 
@@ -156,9 +210,7 @@ case "$(decide)" in
     exec "$bun_path" "$TUI_ENTRY" "${args[@]}"
     ;;
   *)
-    if [[ "$use_tui" == true ]] && ! has_deps; then
-      printf 'TUI dependencies are missing (cd tui && bun install); using install.sh.\n' >&2
-    fi
+    explain_fallback
     fallback "${args[@]}"
     ;;
 esac

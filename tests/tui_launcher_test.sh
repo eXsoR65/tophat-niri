@@ -100,4 +100,18 @@ chmod +x "$tmp_dir/bin/curl"
 out="$(PATH="$tmp_dir/bin:$PATH" TOPHAT_ROOT="$fake_full" "$launcher" --install-runtime)"
 [[ "$out" == "install.sh args: " ]] || fail "--install-runtime should still fall back without a terminal: '${out}'"
 
+# --- the Bun dependency is stated, not implied ----------------------------
+out="$("$launcher" --help)"
+grep -q 'TUI needs Bun' <<<"$out" || fail "--help does not mention the Bun dependency"
+grep -q 'bun upgrade' <<<"$out" || fail "--help does not say how to keep Bun patched"
+
+# A fallback caused by a missing runtime must name the runtime.
+err="$(TOPHAT_ROOT="$fake_full" PATH="/usr/bin:/bin" "$launcher" 2>&1 >/dev/null)"
+grep -q 'needs Bun' <<<"$err" || fail "missing-runtime fallback did not mention Bun: ${err}"
+grep -q -- '--install-runtime' <<<"$err" || fail "missing-runtime fallback did not point at --install-runtime"
+
+# ...and a missing terminal says so instead of blaming Bun.
+out="$(TOPHAT_ROOT="$fake_full" TOPHAT_BUN="$fake_bun" "$launcher")"
+[[ "$out" == "install.sh args: " ]] || fail "fallback with a runtime present failed: '${out}'"
+
 echo "tui_launcher_test.sh: PASS"
