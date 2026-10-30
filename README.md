@@ -115,13 +115,19 @@ options, start, watch the log and the stage markers, then reboot if it worked.
 ```
 
 The TUI is strictly optional. It needs [Bun](https://bun.sh), which `./tophat`
-offers to install on first use into a Tophat-managed directory
-(`/var/lib/tophat/bun` when run as root, `~/.local/share/tophat/bun` otherwise):
+offers to install on first use **using Bun's official installer** — so Bun ends
+up where its documentation says it does (`~/.bun`, on your `PATH` via your shell
+profile):
 
 ```bash
-sudo ./tophat --install-runtime   # non-interactive: provision Bun, then start
+./tophat --install-runtime        # non-interactive: install Bun, then start
 ./tophat --diagnose               # what was found, and what would happen
 ```
+
+`./tophat` looks for Bun only where that installer leaves it: `$TOPHAT_BUN` (an
+escape hatch), `bun` on `PATH`, then `~/.bun/bin/bun` for the current shell
+before your profile is reloaded. If you already have Bun from a package manager,
+nothing is installed.
 
 The runtime is **not** shipped as a compiled binary on purpose: that would freeze
 a Bun inside each release, and a runtime security fix would then wait on a new

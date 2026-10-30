@@ -135,12 +135,12 @@ was already guarded — but they will catch new ones.
   Instead the launcher provisions a *runtime* and runs the sources from the
   checkout:
 
-  - look for Bun in this order: `--bun`/`TOPHAT_BUN` override, `PATH`
-    (`dnf install bun` from a COPR, or a distro package if one ever ships),
-    Tophat's own managed directory, then `~/.bun/bin/bun`;
-  - if absent, offer to install it once, into a Tophat-managed directory
-    (`/var/lib/tophat/bun` when root, `~/.local/share/tophat/bun` otherwise) via
-    Bun's official installer, and say where it went;
+  - look for Bun only where its own installer puts it: `$TOPHAT_BUN` (an escape
+    hatch), `PATH` (a packaged Bun, or an install whose profile has loaded),
+    then `~/.bun/bin/bun` for the current shell;
+  - if absent, offer to install it once by running Bun's official installer
+    unmodified, so it lands in the documented location and on `PATH` the way
+    Bun's own instructions describe;
   - never install silently: `--install-runtime` does it non-interactively, and
     declining falls back to `install.sh` exactly as before.
 

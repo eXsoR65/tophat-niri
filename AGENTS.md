@@ -149,9 +149,10 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
     `tests/tui_launcher_test.sh` asserts those fallbacks; the launcher must never
     be a prerequisite for installing. The runtime is **never shipped as a
     compiled binary**: that would freeze Bun inside the release and tie runtime
-    security fixes to our release cadence. Bun is looked up (override, `PATH`,
-    managed dir, `~/.bun`), installed only on request (`--install-runtime` or a
-    prompt) into a managed directory, and its version is displayed.
+    security fixes to our release cadence. Bun is looked up only where its own
+    installer leaves it — `$TOPHAT_BUN` (escape hatch), `PATH`, then
+    `~/.bun/bin/bun` — installed only on request (`--install-runtime` or a
+    prompt) by running that installer unmodified, and its version is displayed.
 
 ## Known quirks / rough edges
 

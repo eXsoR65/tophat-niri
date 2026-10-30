@@ -13,7 +13,7 @@
 #  Usage:
 #    ./tophat                      TUI when possible, else install.sh
 #    ./tophat --no-tui [opts...]   always install.sh
-#    ./tophat --install-runtime    install Bun into a managed dir, then start
+#    ./tophat --install-runtime    install Bun (official installer), then start
 #    ./tophat --diagnose           report what was found and what would happen
 #    ./tophat [options...]         arguments are passed to install.sh
 # =============================================================================
@@ -32,25 +32,27 @@ otherwise.
 
 Options:
   --no-tui            Always run install.sh
-  --install-runtime   Install Bun into a managed directory, then start the TUI
+  --install-runtime   Install Bun with its official installer, then start the TUI
   --diagnose          Report what was found and what would happen
   --help, -h          Show this message
 
 The TUI needs Bun. It is not bundled: a compiled binary would freeze the
 runtime, so a Bun security fix would wait for a Tophat release instead of
 reaching you through `bun upgrade` (or `dnf upgrade`, if Bun is packaged).
-./tophat looks for Bun in this order:
 
-  1. $TOPHAT_BUN
-  2. bun in $PATH
-  3. the managed directory (see --diagnose)
-  4. ~/.bun/bin/bun
+Bun is installed the way its documentation says, and found where that
+installer leaves it:
+
+  1. $TOPHAT_BUN (escape hatch for tests and unusual setups)
+  2. bun in $PATH (a packaged Bun, or an install you have already reloaded)
+  3. ~/.bun/bin/bun (the official installer's default location, for the
+     current shell before your profile picks it up)
 
 Without a terminal, without the TUI dependencies, or with any other argument,
 this runs install.sh unchanged. install.sh never needs Bun.
 
-Keep the runtime patched: `bun upgrade` for a managed copy, `dnf upgrade` for a
-packaged one. The TUI shows the version it is running on its first screen.
+Keep the runtime patched: `bun upgrade` for the official install, `dnf upgrade`
+for a packaged one. The TUI shows the version it is running on its first screen.
 EOF
 }
 
@@ -73,26 +75,17 @@ for arg in "$@"; do
 done
 ((${#args[@]} == 0)) || use_tui=false
 
-is_root() { [[ ${EUID:-$(id -u)} -eq 0 ]]; }
-
-# Where a runtime installed by this launcher lives.
-runtime_dir() {
-  if [[ -n "${TOPHAT_BUN_DIR:-}" ]]; then
-    printf '%s' "$TOPHAT_BUN_DIR"
-  elif is_root; then
-    printf '%s' "/var/lib/tophat/bun"
-  else
-    printf '%s/.local/share/tophat/bun' "${HOME:-/root}"
-  fi
-}
+# Bun's official installer puts the runtime in ~/.bun and adds ~/.bun/bin to
+# PATH in your shell profile. So: PATH first (packaged Bun, or an install whose
+# profile has been reloaded), then that default directory for the current shell.
+BUN_BIN="${HOME:-/root}/.bun/bin/bun"
 
 has_deps() { [[ -d "$ROOT/tui/node_modules/@opentui" ]]; }
 
-# An explicit override, then whatever the system provides (a packaged Bun, or
-# the official installer's default location), then our own managed copy.
 find_bun() {
   local candidate
 
+  # An escape hatch for tests and unusual setups, nothing more.
   if [[ -n "${TOPHAT_BUN:-}" && -x "${TOPHAT_BUN}" ]]; then
     printf '%s' "$TOPHAT_BUN"
     return 0
@@ -101,14 +94,8 @@ find_bun() {
     printf '%s' "$candidate"
     return 0
   fi
-  candidate="$(runtime_dir)/bin/bun"
-  if [[ -x "$candidate" ]]; then
-    printf '%s' "$candidate"
-    return 0
-  fi
-  candidate="${HOME:-/root}/.bun/bin/bun"
-  if [[ -x "$candidate" ]]; then
-    printf '%s' "$candidate"
+  if [[ -x "$BUN_BIN" ]]; then
+    printf '%s' "$BUN_BIN"
     return 0
   fi
   return 1
@@ -135,16 +122,17 @@ decide() {
   printf 'tui'
 }
 
+# Bun is installed the way its documentation says: the official installer,
+# unmodified, with its default location (~/.bun). No private directory, no
+# overridden BUN_INSTALL.
 install_runtime() {
-  local dir installer
-  dir="$(runtime_dir)"
-  mkdir -p "$dir"
-  printf 'Installing Bun into %s (official installer: https://bun.sh/install)\n' "$dir" >&2
+  local installer
+  printf 'Installing Bun with its official installer (https://bun.sh/install)\n' >&2
   installer="$(mktemp)"
   curl -fsSL https://bun.sh/install -o "$installer"
-  BUN_INSTALL="$dir" bash "$installer" >&2
+  bash "$installer" >&2
   rm -f "$installer"
-  printf 'Bun installed in %s. Keep it patched with: %s/bin/bun upgrade\n' "$dir" "$dir" >&2
+  printf 'Bun installed; keep it patched with: bun upgrade\n' >&2
 }
 
 explain_fallback() {
@@ -175,10 +163,9 @@ if [[ "$diagnose" == true ]]; then
   printf 'tui_entry=%s\n' "$TUI_ENTRY"
   printf 'deps=%s\n' "$(has_deps && echo yes || echo no)"
   printf 'bun=%s\n' "${bun_path:-none}"
-  printf 'runtime_dir=%s\n' "$(runtime_dir)"
   printf 'tty=%s\n' "$([[ -t 0 && -t 1 ]] && echo yes || echo no)"
   printf 'decision=%s\n' "$(decide)"
-  printf 'update_hint=%s\n' "$(find_bun >/dev/null 2>&1 && printf 'keep it patched: bun upgrade (managed) or dnf upgrade (packaged)' || printf 'run --install-runtime to provision it')"
+  printf 'update_hint=%s\n' "$(find_bun >/dev/null 2>&1 && printf 'keep it patched: bun upgrade, or dnf upgrade if packaged' || printf 'run --install-runtime to install it the documented way')"
   exit 0
 fi
 
@@ -190,9 +177,8 @@ case "$(decide)" in
     if [[ "$install_runtime" == true ]]; then
       install_runtime
     else
-      dir="$(runtime_dir)"
       printf 'The TUI needs Bun, which is not installed.\n' >&2
-      printf 'Install it into %s now? [y/N] ' "$dir" >&2
+      printf "Install it now with Bun's official installer? [y/N] " >&2
       answer=""
       read -r answer || answer=""
       case "$answer" in
