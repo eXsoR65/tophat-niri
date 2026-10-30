@@ -55,6 +55,15 @@ source "$SETUP_LIB/stages.sh"
 
 parse_args "$@"
 
+# Machine-readable plan: one stage name per line on stdout, nothing else, and
+# no privilege needed. resolve_stages' own summary goes to stderr so callers can
+# consume stdout directly.
+if [[ "${PRINT_PLAN:-false}" == true ]]; then
+  resolve_stages >&2
+  printf '%s\n' "${STAGES[@]}"
+  exit 0
+fi
+
 resolve_stages
 
 # -----------------------------------------------------------------------------

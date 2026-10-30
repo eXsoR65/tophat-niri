@@ -99,6 +99,52 @@ describe("App", () => {
     }
   });
 
+  test("shows the resolved plan and labels dependencies", async () => {
+    const config = { ...defaultConfig("") };
+    config.selected.add("config");
+    const plan = ["preflight", "repos", "packaging", "config"] as const;
+
+    const frame = await frameOf(
+      <App
+        initialScreen="config"
+        initialConfig={config}
+        initialPlan={[...plan]}
+        initialRemovals={[]}
+        loadPlan={() => Promise.resolve([...plan])}
+      />,
+    );
+
+    expect(frame).toContain("Plan: preflight -> repos -> packaging -> config");
+    expect(frame).toContain("config");
+    // stages the selection pulls in are labelled, the chosen one is not
+    expect(frame).toContain("[ ] preflight  (dependency)");
+    expect(frame).toContain("[x] config");
+  });
+
+  test("the removals toggle previews what would be removed", async () => {
+    const setup = await testRender(
+      <App initialRemovals={["mako", "waybar", "wofi"]} loadPlan={() => Promise.resolve([])} />,
+      { width: 90, height: 40 },
+    );
+    try {
+      await setup.waitForVisualIdle();
+      // Cursor starts on "dry run"; the removals row is two rows down. Each key
+      // gets its own act(): the input parser dispatches asynchronously, so two
+      // presses inside one act() are not necessarily processed before the frame.
+      await act(async () => {
+        setup.mockInput.pressArrow("down");
+      });
+      await act(async () => {
+        setup.mockInput.pressArrow("down");
+      });
+      await setup.waitForVisualIdle();
+      const frame = setup.captureCharFrame();
+      expect(frame).toContain("Removes 3: mako, waybar, wofi");
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+
   test("done screen reports a failure with its exit code", async () => {
     const frame = await frameOf(<App initialScreen="done" initialExitCode={1} />);
     expect(frame).toContain("Failed (exit 1)");

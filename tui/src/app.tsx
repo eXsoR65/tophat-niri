@@ -4,7 +4,7 @@
 // against the real installer; stage graphs, event streams and distribution come
 // in later milestones (see docs/TUI-PLAN.md).
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useKeyboard, useRenderer } from "@opentui/react";
 import { STAGES, type StageName } from "./stages.ts";
 import { defaultConfig, detectedUser, toggleStage, type Config } from "./config.ts";
@@ -13,6 +13,7 @@ import { tailLines } from "./logtail.ts";
 import { latestLog, resolvePaths } from "./paths.ts";
 import { startInstall, type Engine } from "./engine.ts";
 import { FLAG_LABELS, ROWS } from "./rows.ts";
+import { dependencies, fetchPlan, loadRemovals } from "./planner.ts";
 import { keyAction, moveCursor } from "./keys.ts";
 import { readdirSync, readFileSync } from "node:fs";
 
@@ -24,8 +25,11 @@ export type AppProps = {
   initialDone?: StageName[];
   initialExitCode?: number | null;
   paths?: ReturnType<typeof resolvePaths>;
-  /** Test seam: never spawn a child process. */
+  /** Test seams: never spawn a child process or read the repo. */
   startEngine?: (config: Config) => Engine | null;
+  initialPlan?: StageName[];
+  initialRemovals?: string[];
+  loadPlan?: (config: Config) => Promise<StageName[]>;
 };
 
 export function App({
@@ -35,9 +39,14 @@ export function App({
   initialExitCode = null,
   paths,
   startEngine,
+  initialPlan = [],
+  initialRemovals,
+  loadPlan,
 }: AppProps) {
   const renderer = useRenderer();
-  const enginePaths = paths ?? resolvePaths();
+  // Memoised: a fresh object each render would re-run every effect that depends
+  // on the paths, and the ones that set state would then loop.
+  const enginePaths = useMemo(() => paths ?? resolvePaths(), [paths]);
   const [screen, setScreen] = useState<Screen>(initialScreen);
   const [config, setConfig] = useState<Config>(initialConfig ?? defaultConfig(detectedUser()));
   const [cursor, setCursor] = useState(0);
@@ -45,6 +54,8 @@ export function App({
   const [done, setDone] = useState<Set<StageName>>(new Set(initialDone));
   const [exitCode, setExitCode] = useState<number | null>(initialExitCode);
   const [elapsed, setElapsed] = useState(0);
+  const [plan, setPlan] = useState<StageName[]>(initialPlan);
+  const [removals, setRemovals] = useState<string[]>(initialRemovals ?? []);
 
   const engineRef = useRef<Engine | null>(null);
   const startedAtRef = useRef(0);
@@ -76,6 +87,26 @@ export function App({
     const timer = setInterval(tick, 400);
     return () => clearInterval(timer);
   }, [screen, enginePaths]);
+
+  // The replacement list is static, so it is read once.
+  useEffect(() => {
+    if (initialRemovals) return;
+    setRemovals(loadRemovals(enginePaths));
+  }, [enginePaths, initialRemovals]);
+
+  // The resolved plan comes from lib/stages.sh via `--print-plan`; it is re-asked
+  // whenever the selection changes, and stale answers are dropped.
+  useEffect(() => {
+    if (screen !== "config") return;
+    let cancelled = false;
+    const load = loadPlan ? loadPlan(config) : fetchPlan(enginePaths, config);
+    void load.then((result) => {
+      if (!cancelled) setPlan(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [config.selected, screen, enginePaths, loadPlan]);
 
   // Leaving the app must not leave an installer running unattended.
   useEffect(() => {
@@ -134,6 +165,9 @@ export function App({
   });
 
   if (screen === "config") {
+    const dependencyStages = dependencies(plan, config);
+    const currentRow = ROWS[cursor];
+
     return (
       <box style={{ flexDirection: "column", padding: 1, gap: 1 }}>
         <text fg="#00b0ff">Tophat</text>
@@ -157,6 +191,7 @@ export function App({
               return (
                 <text key={row.stage} fg={index === cursor ? "#00b0ff" : undefined}>
                   {pointer} [{on ? "x" : " "}] {row.stage}
+                  {dependencyStages.has(row.stage) ? "  (dependency)" : ""}
                 </text>
               );
             }
@@ -171,6 +206,16 @@ export function App({
           {config.selected.size === 0 ? "All stages selected" : `${config.selected.size} stage(s) selected`}
           {config.targetUser ? `  user: ${config.targetUser}` : ""}
         </text>
+        <text fg="#888888">
+          Plan: {plan.length > 0 ? plan.join(" -> ") : "(resolving from lib/stages.sh)"}
+        </text>
+        {currentRow?.kind === "flag" && currentRow.key === "acceptRemovals" ? (
+          <text fg="#888888">
+            {removals.length > 0
+              ? `Removes ${removals.length}: ${removals.slice(0, 6).join(", ")}${removals.length > 6 ? ", ..." : ""}`
+              : "No replacement list found"}
+          </text>
+        ) : null}
         <text fg="#555555">space toggle   enter start   q quit</text>
       </box>
     );

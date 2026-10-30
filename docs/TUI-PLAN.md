@@ -1,6 +1,6 @@
 # Tophat TUI Plan
 
-Status: **M1 implemented** (M2–M5 planned)
+Status: **M1 and M2 implemented** (M3–M5 planned)
 Frontend stack: [OpenTUI](https://opentui.com) + React bindings + Bun
 Tracking: this document (not `docs/TODO.md` — Phases 1–4 there are done)
 
@@ -101,10 +101,17 @@ was already guarded — but they will catch new ones.
   **Deferred to M2:** the target-user text input (M1 shows the detected user and
   accepts no override), the resolved-plan preview, and the replacement-package
   preview for the removals toggle.
-- [ ] **M2 — Stage graph UI.** Checklist with dependency visualization: select
-  `config` → `preflight/repos/packaging` auto-check, labeled "dependency".
-  Resolved plan preview from `lib/stages.sh`. Replacement-package preview for
-  the accept-removals toggle (reads `packages/remove-replaced.packages`).
+- [x] **M2 — Stage graph UI.** Done 2026-10-30.
+  `install.sh --print-plan` prints the resolved stage list (one per line, stdout
+  only, no root needed), so the dependency graph is asked for rather than
+  mirrored in TypeScript. `tests/plan_test.sh` pins that contract: closure
+  included, failures on stderr, specific dependency edges asserted.
+  The config screen shows the resolved plan and labels stages the selection pulls
+  in as `(dependency)`. Deliberate deviation from the original sketch: pulled-in
+  stages are **labelled, not auto-checked** — a checked box means "I chose this",
+  and conflating the two would make the selection unreadable.
+  The accept-removals row previews `packages/remove-replaced.packages`
+  ("Removes 9: mako, waybar, ...").
 - [ ] **M3 — Structured events.** NDJSON protocol (above); per-stage status
   board (pending/running/done/failed/skipped) with durations; current-command
   line.

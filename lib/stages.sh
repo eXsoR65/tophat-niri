@@ -32,6 +32,9 @@ export SELECTIVE_STAGES=""
 export FORCE=false
 export VERBOSE=false
 export ACCEPT_PACKAGE_REMOVALS=false
+# Print the resolved stage list and exit, without touching the system. The TUI
+# and scripts use this instead of reimplementing the dependency resolver.
+export PRINT_PLAN=false
 export TARGET_USER="${TARGET_USER:-}"
 
 # Version reporting. install.sh exports TOPHAT_VERSION; when this file is
@@ -59,6 +62,7 @@ Options:
   --target-user USER Configure this non-root user account
   --accept-package-removals
                      Allow Tophat to remove packages listed as replaced
+  --print-plan       Print the resolved stage list (one per line) and exit
   --force            Run even if setup marker indicates completion
   --verbose          Show command output inline (don't suppress)
   --version          Show version and exit
@@ -103,6 +107,10 @@ parse_args() {
         ;;
       --accept-package-removals)
         ACCEPT_PACKAGE_REMOVALS=true
+        shift
+        ;;
+      --print-plan)
+        PRINT_PLAN=true
         shift
         ;;
       --force)
