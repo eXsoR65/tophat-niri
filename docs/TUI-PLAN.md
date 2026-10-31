@@ -288,8 +288,9 @@ gates did not catch; all are fixed with regressions:
   and a populated Run log overlapped the UI. The config list now uses a
   cursor-following window (`visibleWindow`), the Run/Done log panes show only
   what fits (50 lines are read, then clipped), and every displayed line is
-  truncated (`clipLine`) so a long command or log line cannot wrap into extra
-  rows. Render tests pin 80×24 and 80×20, including long lines.
+  truncated (`clipLine`) with control characters rendered as spaces, so a long
+  or tabbed command/log line cannot wrap into extra rows. Render tests pin
+  80×24 and 80×20, including long and control-character lines.
 - **The target user could not be entered.** `detectedUser` was read-only, so a
   root login could not name the required non-root account without leaving the
   TUI. The User row is now a focused text input (`enter` edits, `enter`/`esc`

@@ -38,4 +38,10 @@ describe("clipLine", () => {
   test("counts code points rather than UTF-16 units", () => {
     expect(clipLine("a😀bc", 3)).toBe("a😀…");
   });
+
+  test("renders tabs and control characters as single-cell spaces", () => {
+    expect(clipLine("a\tb", 10)).toBe("a b");
+    expect(clipLine("a\rb", 10)).toBe("a b");
+    expect(clipLine("a\u001b[31mb", 10)).toBe("a [31mb");
+  });
 });

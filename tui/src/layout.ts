@@ -14,8 +14,12 @@ export type Window = {
 /** Truncate a line to the cells available, so it cannot wrap into extra rows. */
 export function clipLine(text: string, maxWidth: number): string {
   if (maxWidth <= 0) return "";
-  const characters = [...text];
-  if (characters.length <= maxWidth) return text;
+  // Tabs expand to the next tab stop, and CR/ESC can move the cursor; either
+  // would defeat the width budget even after truncation. Render controls as
+  // spaces so every remaining character occupies one cell.
+  const safe = text.replace(/[\u0000-\u001f\u007f]/g, " ");
+  const characters = [...safe];
+  if (characters.length <= maxWidth) return safe;
   if (maxWidth === 1) return "…";
   return `${characters.slice(0, maxWidth - 1).join("")}…`;
 }
