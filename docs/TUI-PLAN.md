@@ -274,8 +274,9 @@ gates did not catch; all are fixed with regressions:
 - **Removal consent was not part of the marker.** Declining removals in the TUI
   completed packaging and wrote a normal marker, so enabling removals later still
   skipped packaging and never removed anything. The marker now records
-  `removals=skipped`, and `stage_already_run` invalidates it when
-  `ACCEPT_PACKAGE_REMOVALS` is on. Covered by `pkg_test.sh` and
+  `removals=skipped` or `removals=accepted`; a skipped entry is invalidated when
+  `ACCEPT_PACKAGE_REMOVALS` is on, and a legacy packaging marker without either
+  entry is rechecked once. Covered by `pkg_test.sh` and
   `marker_invalidation_test.sh`.
 - **Explicit runtime setup could not repair a partial install.** The launcher
   treated `node_modules/@opentui` existing as sufficient, so an interrupted
@@ -285,8 +286,10 @@ gates did not catch; all are fixed with regressions:
   back to Bash. Two PTY regressions cover the retry and the fallback.
 - **The layout clipped rows at 80×24.** The config list lost stages and Start,
   and a populated Run log overlapped the UI. The config list now uses a
-  cursor-following window (`visibleWindow`), and the Run/Done log panes show only
-  what fits (50 lines are read, then clipped). Render tests pin 80×24 and 80×20.
+  cursor-following window (`visibleWindow`), the Run/Done log panes show only
+  what fits (50 lines are read, then clipped), and every displayed line is
+  truncated (`clipLine`) so a long command or log line cannot wrap into extra
+  rows. Render tests pin 80×24 and 80×20, including long lines.
 - **The target user could not be entered.** `detectedUser` was read-only, so a
   root login could not name the required non-root account without leaving the
   TUI. The User row is now a focused text input (`enter` edits, `enter`/`esc`

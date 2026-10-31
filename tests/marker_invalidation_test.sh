@@ -107,6 +107,24 @@ if grep -q '^removals=' "$SETUP_STATE_DIR/stage-packaging.done"; then
 fi
 skip_yes packaging || fail "marker without skipped removals was not honoured"
 
+# A packaging marker written before consent tracking has no `removals` field.
+# With consent on it is rechecked once instead of silently skipping the removal.
+: >"$SETUP_LOG"
+ACCEPT_PACKAGE_REMOVALS=true
+skip_no packaging || fail "legacy packaging marker was trusted with consent on"
+grep -q "predates removal-consent tracking" "$SETUP_LOG" ||
+  fail "legacy marker invalidation not explained"
+stage_marker_write repos
+skip_yes repos || fail "removal consent invalidated an unrelated stage"
+
+# A completed removal is recorded, so later runs with consent on stay skipped.
+PACKAGE_REMOVALS_DONE_STAGE=packaging
+stage_marker_write packaging
+grep -q '^removals=accepted$' "$SETUP_STATE_DIR/stage-packaging.done" ||
+  fail "completed removals not recorded in the marker"
+skip_yes packaging || fail "marker with completed removals was not honoured"
+ACCEPT_PACKAGE_REMOVALS=false
+
 # Only the stage that skipped the removal records it, not later stages.
 PACKAGE_REMOVALS_SKIPPED_STAGE=packaging
 stage_marker_write repos

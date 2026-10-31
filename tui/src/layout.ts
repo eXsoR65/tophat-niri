@@ -11,6 +11,15 @@ export type Window = {
   end: number;
 };
 
+/** Truncate a line to the cells available, so it cannot wrap into extra rows. */
+export function clipLine(text: string, maxWidth: number): string {
+  if (maxWidth <= 0) return "";
+  const characters = [...text];
+  if (characters.length <= maxWidth) return text;
+  if (maxWidth === 1) return "…";
+  return `${characters.slice(0, maxWidth - 1).join("")}…`;
+}
+
 /** The slice of `length` rows that keeps `cursor` visible in `capacity` rows. */
 export function visibleWindow(cursor: number, length: number, capacity: number): Window {
   const size = Math.max(1, Math.min(length, Math.floor(capacity)));

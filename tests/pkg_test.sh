@@ -75,9 +75,19 @@ pkg_install alfa beta >/dev/null
 # --- pkg_remove with nothing present is a no-op ------------------------------
 : >"$MOCK_INSTALLED"
 : >"$DNF_CALLS"
-pkg_remove ghost >/dev/null
+CURRENT_STAGE=packaging pkg_remove ghost >/dev/null
 [[ ! -s "$DNF_CALLS" ]] || fail "dnf remove called for absent package"
 grep -q "Nothing to remove" "$SETUP_LOG" || fail "remove no-op not logged"
+[[ "${PACKAGE_REMOVALS_DONE_STAGE:-}" == "packaging" ]] ||
+  fail "an already-clean removal was not recorded as satisfied"
+unset PACKAGE_REMOVALS_DONE_STAGE
+
+# --- An empty removal list is a satisfied request, not an unknown one -------
+printf '# nothing to remove\n' >"$tmp_dir/empty.packages"
+CURRENT_STAGE=packaging pkg_remove_from_list "$tmp_dir/empty.packages" >/dev/null
+[[ "${PACKAGE_REMOVALS_DONE_STAGE:-}" == "packaging" ]] ||
+  fail "an empty removal list was not recorded as satisfied"
+unset PACKAGE_REMOVALS_DONE_STAGE
 
 # --- pkg_remove refuses without confirmation (no TTY, no flag) ---------------
 printf 'mako\nwaybar\n' >"$MOCK_INSTALLED"
@@ -91,9 +101,12 @@ grep -q -- "--accept-package-removals" "$SETUP_LOG" || fail "refusal guidance no
 # --- pkg_remove honors ACCEPT_PACKAGE_REMOVALS and writes a manifest ---------
 printf 'mako\nwaybar\n' >"$MOCK_INSTALLED"
 : >"$DNF_CALLS"
-ACCEPT_PACKAGE_REMOVALS=true pkg_remove mako waybar >/dev/null
+CURRENT_STAGE=packaging ACCEPT_PACKAGE_REMOVALS=true pkg_remove mako waybar >/dev/null
 [[ "$(cat "$DNF_CALLS")" == "remove -y mako waybar" ]] ||
   fail "dnf remove called with wrong set: $(cat "$DNF_CALLS")"
+[[ "${PACKAGE_REMOVALS_DONE_STAGE:-}" == "packaging" ]] ||
+  fail "completed removals were not recorded for the marker"
+unset PACKAGE_REMOVALS_DONE_STAGE
 manifest_count="$(find "$SETUP_STATE_DIR/manifests" -type f | wc -l)"
 [[ "$manifest_count" -eq 1 ]] || fail "no removal manifest written"
 grep -qxF mako "$SETUP_STATE_DIR"/manifests/removed-packages-*.txt ||

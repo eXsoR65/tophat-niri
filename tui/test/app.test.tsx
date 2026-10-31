@@ -159,6 +159,40 @@ describe("App", () => {
     }
   });
 
+  test("long log and command lines are clipped instead of wrapping on 80x24", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tophat-layout-long-"));
+    const long = "x".repeat(300);
+    writeFileSync(
+      join(root, "latest.log"),
+      Array.from({ length: 10 }, (_, index) => `LONG ${index} ${long}`).join("\n"),
+    );
+    const paths = {
+      root,
+      installScript: join(root, "install.sh"),
+      logDir: root,
+      stateDir: join(root, "state"),
+    };
+    const events = [
+      { event: "stage_start", at: 1, stage: "packaging" },
+      { event: "command", at: 2, stage: "packaging", desc: long },
+    ];
+    const setup = await testRender(
+      <App initialScreen="run" initialEvents={events} paths={paths} />,
+      { width: 80, height: 24 },
+    );
+    try {
+      await setup.waitForVisualIdle();
+      const frame = setup.captureCharFrame();
+      expect(frame).toContain("[ ] preflight");
+      expect(frame).toContain("[>] packaging");
+      expect(frame).toContain("[ ] finalize");
+      expect(frame).toContain("q abort");
+      expect(frame).toContain("…");
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+
   test("run screen shows the stage board and waits for output", async () => {
     const frame = await frameOf(<App initialScreen="run" />);
     expect(frame).toContain("installing");

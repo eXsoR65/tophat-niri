@@ -71,6 +71,11 @@ pkg_remove() {
 
   if [[ ${#to_remove[@]} -eq 0 ]]; then
     log_ok "Nothing to remove (already absent)"
+    # The desired state already holds, so a later consent change needs no rerun.
+    if [[ -n "${CURRENT_STAGE:-}" ]]; then
+      # shellcheck disable=SC2034  # consumed by stage_marker_write in run_logged.sh
+      PACKAGE_REMOVALS_DONE_STAGE="$CURRENT_STAGE"
+    fi
     return 0
   fi
 
@@ -114,6 +119,11 @@ pkg_remove() {
 
   run_logged "Removing packages: ${to_remove[*]}" dnf remove -y "${to_remove[@]}"
 
+  if [[ -n "${CURRENT_STAGE:-}" ]]; then
+    # shellcheck disable=SC2034  # consumed by stage_marker_write in run_logged.sh
+    PACKAGE_REMOVALS_DONE_STAGE="$CURRENT_STAGE"
+  fi
+
   local manifest_dir="$SETUP_STATE_DIR/manifests"
   local manifest=""
   manifest="$manifest_dir/removed-packages-$(date '+%Y%m%dT%H%M%S%z').txt"
@@ -141,6 +151,11 @@ pkg_remove_from_list() {
   fi
 
   if [[ ${#pkgs[@]} -eq 0 ]]; then
+    # An empty list is a satisfied removal request, not an unknown one.
+    if [[ -n "${CURRENT_STAGE:-}" ]]; then
+      # shellcheck disable=SC2034  # consumed by stage_marker_write in run_logged.sh
+      PACKAGE_REMOVALS_DONE_STAGE="$CURRENT_STAGE"
+    fi
     return 0
   fi
 

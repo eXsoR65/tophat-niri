@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { visibleWindow } from "../src/layout.ts";
+import { clipLine, visibleWindow } from "../src/layout.ts";
 
 describe("visibleWindow", () => {
   test("shows everything when the terminal is tall enough", () => {
@@ -20,5 +20,22 @@ describe("visibleWindow", () => {
     expect(visibleWindow(0, 3, 10)).toEqual({ start: 0, end: 3 });
     expect(visibleWindow(0, 0, 5)).toEqual({ start: 0, end: 0 });
     expect(visibleWindow(4, 12, 0)).toEqual({ start: 4, end: 5 });
+  });
+});
+
+describe("clipLine", () => {
+  test("leaves short lines untouched", () => {
+    expect(clipLine("dnf upgrade", 20)).toBe("dnf upgrade");
+    expect(clipLine("", 20)).toBe("");
+  });
+
+  test("truncates to the available cells with one ellipsis", () => {
+    expect(clipLine("abcdefghij", 5)).toBe("abcd…");
+    expect(clipLine("abcdefghij", 10)).toBe("abcdefghij");
+    expect(clipLine("abcdefghij", 1)).toBe("…");
+  });
+
+  test("counts code points rather than UTF-16 units", () => {
+    expect(clipLine("a😀bc", 3)).toBe("a😀…");
   });
 });

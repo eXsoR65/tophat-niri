@@ -238,9 +238,15 @@ stage_marker_write() {
     printf 'user=%s\n' "${TARGET_USER:-unknown}"
     # A stage that kept DMS-replaced packages must say so: otherwise turning
     # removal consent on later would find a "complete" marker and silently skip
-    # the removal entirely.
+    # the removal entirely. A completed removal is recorded too, so the marker
+    # is stable once consent is satisfied.
     if [[ -n "${PACKAGE_REMOVALS_SKIPPED_STAGE:-}" && "$PACKAGE_REMOVALS_SKIPPED_STAGE" == "$stage" ]]; then
       printf 'removals=skipped\n'
+      PACKAGE_REMOVALS_SKIPPED_STAGE=""
+      PACKAGE_REMOVALS_DONE_STAGE=""
+    elif [[ -n "${PACKAGE_REMOVALS_DONE_STAGE:-}" && "$PACKAGE_REMOVALS_DONE_STAGE" == "$stage" ]]; then
+      printf 'removals=accepted\n'
+      PACKAGE_REMOVALS_DONE_STAGE=""
       PACKAGE_REMOVALS_SKIPPED_STAGE=""
     fi
   } >"$SETUP_STATE_DIR/stage-${stage}.done"
@@ -286,11 +292,17 @@ stage_already_run() {
   fi
 
   # Consent to remove packages is part of what the stage did. A marker written
-  # while removals were skipped must not hide them once consent is given.
+  # while removals were skipped must not hide them once consent is given. An
+  # older packaging marker predates this record entirely, so treat a missing
+  # entry as "unknown, re-check" rather than assuming the removal happened.
   if [[ "${ACCEPT_PACKAGE_REMOVALS:-false}" == true ]]; then
     recorded="$(_marker_field "$marker" removals || true)"
     if [[ "$recorded" == "skipped" ]]; then
       log_info "Stage '$stage' completed without the requested package removals; re-running it"
+      return 1
+    fi
+    if [[ "$stage" == "packaging" && -z "$recorded" ]]; then
+      log_info "Stage '$stage' predates removal-consent tracking; re-running it so removals are applied"
       return 1
     fi
   fi

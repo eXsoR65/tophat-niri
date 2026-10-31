@@ -99,10 +99,12 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
    a verbatim snapshot of the package lists in `stage-<stage>.config`
    (`_tophat_config_snapshot`). A marker is honoured only when the version, the
    target user and the package selection all still match; otherwise the stage
-   re-runs with a logged reason. A stage that kept the DMS-replaced packages
-   also records `removals=skipped`, and that marker is invalidated once removal
-   consent is given. The snapshot is compared as text because
-   `sha256sum`/`cksum` are not guaranteed on Fedora Minimal.
+   re-runs with a logged reason. A stage records whether package removals were
+   skipped (`removals=skipped`) or completed (`removals=accepted`); a skipped
+   entry is invalidated once removal consent is given, and a legacy packaging
+   marker without an entry is rechecked once for the same reason. The snapshot
+   is compared as text because `sha256sum`/`cksum` are not guaranteed on Fedora
+   Minimal.
 2. **Dry run**: `run_logged` prints the command and returns 0. File writes must
    be manually gated with `[[ "$DRY_RUN" != true ]]`. Dry-run logs go to
    `${TMPDIR:-/tmp}`, not `/var/log/tophat`.

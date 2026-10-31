@@ -16,7 +16,7 @@ import { FLAG_LABELS, ROWS } from "./rows.ts";
 import { dependencies, fetchPlan, loadRemovals } from "./planner.ts";
 import { reduceEvents, stateGlyph, type InstallerEvent } from "./events.ts";
 import { keyAction, moveCursor } from "./keys.ts";
-import { visibleWindow } from "./layout.ts";
+import { visibleWindow, clipLine } from "./layout.ts";
 import { readdirSync } from "node:fs";
 
 export type Screen = "config" | "run" | "done";
@@ -60,10 +60,15 @@ export function App({
   loadPlan,
 }: AppProps) {
   const renderer = useRenderer();
-  const { height } = useTerminalDimensions();
+  const { width, height } = useTerminalDimensions();
   // A 24-line terminal cannot show the full config list plus the log pane at
   // the comfortable spacing; tighten chrome before windowing rows.
   const compact = height < 30;
+  // Text renderables wrap by default. Installer commands and log lines are
+  // routinely wider than a terminal, and wrapped lines would add rows that the
+  // height budget above did not account for, pushing the layout off-screen.
+  const contentWidth = Math.max(20, width - (compact ? 0 : 2));
+  const logWidth = Math.max(16, contentWidth - 4);
   // Memoised: a fresh object each render would re-run every effect that depends
   // on the paths, and the ones that set state would then loop.
   const enginePaths = useMemo(() => paths ?? resolvePaths(), [paths]);
@@ -285,9 +290,13 @@ export function App({
         }}
       >
         <text fg="#00b0ff">Tophat</text>
-        <text fg="#888888">Configure, then run the installer. Nothing is changed until you start.</text>
+        <text fg="#888888">
+          {clipLine("Configure, then run the installer. Nothing is changed until you start.", contentWidth)}
+        </text>
         {IS_ROOT ? null : (
-          <text fg="#ffb300">Not root: the installer will refuse to start. Run it as: sudo ./tophat</text>
+          <text fg="#ffb300">
+            {clipLine("Not root: the installer will refuse to start. Run it as: sudo ./tophat", contentWidth)}
+          </text>
         )}
         <box style={{ flexDirection: "column" }}>
           {ROWS.slice(rowWindow.start, rowWindow.end).map((row, offset) => {
@@ -344,26 +353,43 @@ export function App({
           })}
         </box>
         <text fg="#888888">
-          {config.selected.size === 0 ? "All stages selected" : `${config.selected.size} stage(s) selected`}
-          {config.targetUser ? `  user: ${config.targetUser}` : ""}
-          {rowWindow.end - rowWindow.start < ROWS.length
-            ? `  rows ${rowWindow.start + 1}-${rowWindow.end} of ${ROWS.length}`
-            : ""}
+          {clipLine(
+            `${config.selected.size === 0 ? "All stages selected" : `${config.selected.size} stage(s) selected`}${
+              config.targetUser ? `  user: ${config.targetUser}` : ""
+            }${
+              rowWindow.end - rowWindow.start < ROWS.length
+                ? `  rows ${rowWindow.start + 1}-${rowWindow.end} of ${ROWS.length}`
+                : ""
+            }`,
+            contentWidth,
+          )}
         </text>
         <text fg="#888888">
-          Plan: {plan.length > 0 ? plan.join(" -> ") : "(resolving from lib/stages.sh)"}
+          Plan:{" "}
+          {clipLine(
+            plan.length > 0 ? plan.join(" -> ") : "(resolving from lib/stages.sh)",
+            Math.max(6, contentWidth - 6),
+          )}
         </text>
         {showRemovalsPreview ? (
           <text fg="#888888">
-            {removals.length > 0
-              ? `Removes ${removals.length}: ${removals.slice(0, 6).join(", ")}${removals.length > 6 ? ", ..." : ""}`
-              : "No replacement list found"}
+            {clipLine(
+              removals.length > 0
+                ? `Removes ${removals.length}: ${removals.slice(0, 6).join(", ")}${removals.length > 6 ? ", ..." : ""}`
+                : "No replacement list found",
+              contentWidth,
+            )}
           </text>
         ) : null}
         <text fg="#555555">
-          space/enter activate   q quit   runtime: {RUNTIME}
+          {clipLine(`space/enter activate   q quit   runtime: ${RUNTIME}`, contentWidth)}
         </text>
-        <text fg="#444444">The TUI runs on Bun; keep it patched (bun upgrade, or dnf upgrade if packaged).</text>
+        <text fg="#444444">
+          {clipLine(
+            "The TUI runs on Bun; keep it patched (bun upgrade, or dnf upgrade if packaged).",
+            contentWidth,
+          )}
+        </text>
       </box>
     );
   }
@@ -409,14 +435,16 @@ export function App({
             );
           })}
         </box>
-        {board.currentCommand ? <text fg="#888888">now: {board.currentCommand}</text> : null}
+        {board.currentCommand ? (
+          <text fg="#888888">now: {clipLine(board.currentCommand, Math.max(8, contentWidth - 5))}</text>
+        ) : null}
         <text fg="#888888">
           {elapsed}s elapsed{config.dryRun ? "  (dry run)" : ""}
         </text>
         <box style={{ flexDirection: "column", border: true, padding: 1 }}>
           {logLines.length === 0 ? <text fg="#555555">waiting for output...</text> : null}
           {visibleLog.map((line, index) => (
-            <text key={index}>{line}</text>
+            <text key={index}>{clipLine(line, logWidth)}</text>
           ))}
         </box>
         <text fg="#555555">q abort</text>
@@ -444,15 +472,22 @@ export function App({
         {done.size} of {STAGES.length} stage markers present
       </text>
       <text fg="#888888">
-        {ok
-          ? "Reboot to start the graphical session."
-          : aborted
-            ? "Stopped by you; completed stages are recorded, so a rerun resumes."
-            : "See the output below; a rerun resumes from the completed stages."}
+        {clipLine(
+          ok
+            ? "Reboot to start the graphical session."
+            : aborted
+              ? "Stopped by you; completed stages are recorded, so a rerun resumes."
+              : "See the output below; a rerun resumes from the completed stages.",
+          contentWidth,
+        )}
       </text>
-      {logPath ? <text fg="#555555">log: {logPath}</text> : <text fg="#555555">Installer output (log not initialized)</text>}
+      {logPath ? (
+        <text fg="#555555">log: {clipLine(logPath, Math.max(8, contentWidth - 5))}</text>
+      ) : (
+        <text fg="#555555">Installer output (log not initialized)</text>
+      )}
       <box style={{ flexDirection: "column", border: true, padding: 1 }}>
-        {visibleLog.map((line, index) => <text key={index}>{line}</text>)}
+        {visibleLog.map((line, index) => <text key={index}>{clipLine(line, logWidth)}</text>)}
       </box>
       <text fg="#555555">{!ok && failedStage ? "r retry failed stage   q quit" : "q quit"}</text>
     </box>
