@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseEvents, reduceEvents, stateGlyph } from "../src/events.ts";
+import { logPathFrom, parseEvents, reduceEvents, stateGlyph } from "../src/events.ts";
 
 describe("parseEvents", () => {
   test("parses one JSON object per line", () => {
@@ -57,6 +57,24 @@ describe("reduceEvents", () => {
   test("unknown stage names are ignored", () => {
     const boardWithUnknown = reduceEvents([{ event: "stage_start", at: 1, stage: "notastage" }]);
     expect(boardWithUnknown.currentStage).toBeNull();
+  });
+});
+
+describe("logPathFrom", () => {
+  test("returns the path the installer announced", () => {
+    const events = parseEvents(
+      '{"event":"log","at":1,"path":"/tmp/tophat-dry-run.42.log"}\n{"event":"stage_start","at":2,"stage":"repos"}\n',
+    );
+    expect(logPathFrom(events)).toBe("/tmp/tophat-dry-run.42.log");
+  });
+
+  test("returns null when nothing was announced", () => {
+    expect(logPathFrom(parseEvents('{"event":"stage_start","at":1,"stage":"repos"}'))).toBeNull();
+  });
+
+  test("a later announcement wins", () => {
+    const events = parseEvents('{"event":"log","at":1,"path":"/a"}\n{"event":"log","at":2,"path":"/b"}');
+    expect(logPathFrom(events)).toBe("/b");
   });
 });
 

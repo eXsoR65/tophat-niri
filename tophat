@@ -19,7 +19,18 @@
 # =============================================================================
 set -euo pipefail
 
-ROOT="${TOPHAT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+# Resolve symlinks: people put ./tophat on PATH, and dirname of a link points at
+# the link's directory, not the checkout.
+_script="${BASH_SOURCE[0]}"
+while [[ -L "$_script" ]]; do
+  _dir="$(cd "$(dirname "$_script")" && pwd)"
+  _script="$(readlink "$_script")"
+  [[ "$_script" == /* ]] || _script="$_dir/$_script"
+done
+ROOT="${TOPHAT_ROOT:-$(cd "$(dirname "$_script")" && pwd)}"
+# The TUI resolves install.sh and packages/ from this, so a symlinked launcher
+# and the child agree on where the checkout is.
+export TOPHAT_ROOT="$ROOT"
 INSTALL="$ROOT/install.sh"
 TUI_ENTRY="$ROOT/tui/src/index.tsx"
 

@@ -11,10 +11,10 @@ import { defaultConfig, detectedUser, toggleStage, type Config } from "./config.
 import { markerStages } from "./markers.ts";
 import { tailLines } from "./logtail.ts";
 import { latestLog, resolvePaths } from "./paths.ts";
-import { startInstall, type Engine } from "./engine.ts";
+import { startInstall, terminate, type Engine } from "./engine.ts";
 import { FLAG_LABELS, ROWS } from "./rows.ts";
 import { dependencies, fetchPlan, loadRemovals } from "./planner.ts";
-import { readEvents, reduceEvents, stateGlyph, type InstallerEvent } from "./events.ts";
+import { logPathFrom, readEvents, reduceEvents, stateGlyph, type InstallerEvent } from "./events.ts";
 import { keyAction, moveCursor } from "./keys.ts";
 import { readdirSync, readFileSync } from "node:fs";
 
@@ -23,6 +23,10 @@ export type Screen = "config" | "run" | "done";
 // The runtime is provisioned by ./tophat rather than shipped inside a binary, so
 // which version is running is worth showing: updates are the user's to apply.
 const RUNTIME = typeof Bun !== "undefined" ? `bun ${Bun.version}` : "unknown";
+
+// install.sh refuses to run unprivileged, so say so before Start rather than
+// after a failed run.
+const IS_ROOT = typeof process.getuid === "function" && process.getuid() === 0;
 
 export type AppProps = {
   initialScreen?: Screen;
@@ -63,6 +67,8 @@ export function App({
   const [done, setDone] = useState<Set<StageName>>(new Set(initialDone));
   const [exitCode, setExitCode] = useState<number | null>(initialExitCode);
   const [aborted, setAborted] = useState(initialAborted);
+  // Mirrors `events` for the polling closure, which must not re-subscribe.
+  const eventsRef = useRef<InstallerEvent[]>(initialEvents);
   const [elapsed, setElapsed] = useState(0);
   const [plan, setPlan] = useState<StageName[]>(initialPlan);
   const [events, setEvents] = useState<InstallerEvent[]>(initialEvents);
@@ -82,7 +88,10 @@ export function App({
 
     const tick = () => {
       try {
-        setLogLines(tailLines(readFileSync(latestLog(enginePaths), "utf8"), 12));
+        // The installer announces its log path; a dry run logs to $TMPDIR, so
+        // latest.log is only a fallback for a run we did not start.
+        const logPath = logPathFrom(eventsRef.current) ?? latestLog(enginePaths);
+        setLogLines(tailLines(readFileSync(logPath, "utf8"), 12));
       } catch {
         // No log yet; the first lines appear once the installer starts writing.
       }
@@ -95,7 +104,10 @@ export function App({
       // An empty read must not wipe what is already there: the file is truncated
       // at run start, so "" is a normal transient rather than "no events".
       const fromFile = readEvents(enginePaths);
-      if (fromFile.length > 0) setEvents(fromFile);
+      if (fromFile.length > 0) {
+        eventsRef.current = fromFile;
+        setEvents(fromFile);
+      }
       setElapsed(
         startedAtRef.current === 0 ? 0 : Math.max(0, Math.round((Date.now() - startedAtRef.current) / 1000)),
       );
@@ -129,7 +141,7 @@ export function App({
   // Leaving the app must not leave an installer running unattended.
   useEffect(() => {
     return () => {
-      engineRef.current?.child.kill("SIGTERM");
+      terminate(engineRef.current);
     };
   }, []);
 
@@ -140,6 +152,11 @@ export function App({
     startedAtRef.current = Date.now();
     setAborted(false);
     setExitCode(null);
+    // A retry must not display the previous run's board: the installer truncates
+    // its stream, and the poll only replaces a non-empty read, so stale events
+    // would otherwise linger until the first new one arrives.
+    eventsRef.current = [];
+    setEvents([]);
     setScreen("run");
     engine?.child.on("exit", (code: number | null) => {
       setExitCode(code ?? 1);
@@ -178,7 +195,7 @@ export function App({
         break;
       case "abort":
         setAborted(true);
-        engineRef.current?.child.kill("SIGTERM");
+        terminate(engineRef.current);
         break;
       case "retry": {
         // Retry only the stage that failed: the installer resolves its own
@@ -208,6 +225,9 @@ export function App({
       <box style={{ flexDirection: "column", padding: 1, gap: 1 }}>
         <text fg="#00b0ff">Tophat</text>
         <text fg="#888888">Configure, then run the installer. Nothing is changed until you start.</text>
+        {IS_ROOT ? null : (
+          <text fg="#ffb300">Not root: the installer will refuse to start. Run it as: sudo ./tophat</text>
+        )}
         <box style={{ flexDirection: "column" }}>
           {ROWS.map((row, index) => {
             const pointer = index === cursor ? ">" : " ";
@@ -254,7 +274,7 @@ export function App({
           </text>
         ) : null}
         <text fg="#555555">
-          space toggle   enter start   q quit   runtime: {RUNTIME}
+          space/enter activate   q quit   runtime: {RUNTIME}
         </text>
         <text fg="#444444">The TUI runs on Bun; keep it patched (bun upgrade, or dnf upgrade if packaged).</text>
       </box>

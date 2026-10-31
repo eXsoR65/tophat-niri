@@ -169,6 +169,26 @@ was already guarded — but they will catch new ones.
   and a colour scheme is the kind of thing that should be chosen against a real
   terminal rather than guessed at.
 
+  Review pass before the PR turned up four more things, all fixed here:
+
+  - **Dry runs showed no log.** They log to `$TMPDIR`, not `latest.log`, so the
+    pane the dry-run toggle points at was empty. The installer now announces its
+    log path as an event (`{"event":"log","path":...}`) and the TUI follows it,
+    which also covers a custom log directory.
+  - **Abort left `dnf` running.** Signalling the shell orphaned its foreground
+    command. The child is spawned detached and stopped with `kill(-pid)`;
+    `tui/test/engine.test.ts` proves the grandchild dies too.
+  - **Enter started installs from any row.** A stray Enter on the removals
+    toggle began a privileged run. Enter now activates the highlighted row and
+    only starts on the Start row.
+  - **A retry showed the old board** until the first new event arrived.
+  - **The checkout was found via `process.cwd()`**, so running `./tophat` from
+    another directory (or through a symlink on `PATH`) looked for an `install.sh`
+    that was not there. The root now comes from the module's own location, the
+    launcher resolves symlinks and exports `TOPHAT_ROOT` so both agree.
+  - Plus a non-root warning on the config screen: the installer refuses to run
+    unprivileged, so saying it before Start beats a failed run.
+
 ## Screens (target UX)
 
 1. **Welcome/detect** — Fedora version, target user, hardware notes (from

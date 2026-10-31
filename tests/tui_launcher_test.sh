@@ -117,4 +117,18 @@ grep -q -- '--install-runtime' <<<"$err" || fail "missing-runtime fallback did n
 out="$(TOPHAT_ROOT="$fake_full" TOPHAT_BUN="$fake_bun" "$launcher")"
 [[ "$out" == "install.sh args: " ]] || fail "fallback with a runtime present failed: '${out}'"
 
+# --- a symlinked launcher still finds its checkout -------------------------
+# People put ./tophat on PATH; dirname of a symlink is the link's directory.
+link_dir="$tmp_dir/bin"
+mkdir -p "$link_dir"
+cp "$launcher" "$tmp_dir/launcher-copy"
+chmod +x "$tmp_dir/launcher-copy"
+cp "$fake/install.sh" "$tmp_dir/install.sh"
+chmod +x "$tmp_dir/install.sh"
+mkdir -p "$tmp_dir/tui/src"
+ln -sf "$tmp_dir/launcher-copy" "$link_dir/tophat"
+
+out="$("$link_dir/tophat" --diagnose)"
+grep -qx "root=$tmp_dir" <<<"$out" || fail "symlinked launcher resolved the wrong root: ${out}"
+
 echo "tui_launcher_test.sh: PASS"

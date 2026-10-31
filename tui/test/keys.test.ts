@@ -28,9 +28,15 @@ describe("keyAction on the config screen", () => {
     expect(keyAction("config", "space", startRowIndex, ROWS)).toEqual({ type: "start" });
   });
 
-  test("enter starts from anywhere", () => {
-    expect(keyAction("config", "return", 0, ROWS)).toEqual({ type: "start" });
-    expect(keyAction("config", "enter", 3, ROWS)).toEqual({ type: "start" });
+  test("enter activates the highlighted row, and only starts on the start row", () => {
+    // Enter on an option toggles it: starting a privileged install from a stray
+    // keypress on the removals toggle was the old behaviour.
+    expect(keyAction("config", "return", 0, ROWS)).toEqual({
+      type: "toggle-row",
+      row: { kind: "flag", key: "dryRun" },
+    });
+    expect(keyAction("config", "enter", stageRowIndex, ROWS).type).toBe("toggle-row");
+    expect(keyAction("config", "return", startRowIndex, ROWS)).toEqual({ type: "start" });
   });
 
   test("q quits, unknown keys do nothing", () => {

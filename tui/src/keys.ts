@@ -34,14 +34,16 @@ export function keyAction(screen: Screen, keyName: string, cursor: number, rows:
       return { type: "move", delta: -1 };
     case "down":
       return { type: "move", delta: 1 };
-    case "space": {
+    // Space and Enter both activate the highlighted row. Enter used to start the
+    // install from any row, which meant an accidental keypress on the removals
+    // toggle began a privileged run.
+    case "space":
+    case "return":
+    case "enter": {
       const row = rows[cursor];
       if (!row) return { type: "none" };
       return row.kind === "start" ? { type: "start" } : { type: "toggle-row", row };
     }
-    case "return":
-    case "enter":
-      return { type: "start" };
     case "q":
       return { type: "quit" };
     default:

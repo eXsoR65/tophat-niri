@@ -29,6 +29,16 @@ describe("App", () => {
     expect(frame).toMatch(/runtime: bun \d+\.\d+/);
   });
 
+  test("warns when the run would be unprivileged", async () => {
+    // The installer refuses to run without root, so the config screen says so.
+    // Skipped when the suite itself runs as root, where the warning is absent.
+    if (typeof process.getuid === "function" && process.getuid() === 0) return;
+
+    const frame = await frameOf(<App />);
+    expect(frame).toContain("Not root");
+    expect(frame).toContain("sudo ./tophat");
+  });
+
   test("config screen reflects a selection", async () => {
     const config = { ...defaultConfig("alice"), dryRun: true };
     config.selected.add("packaging");

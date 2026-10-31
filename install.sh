@@ -168,6 +168,9 @@ main() {
 
   # A rerun must not inherit the previous run's event stream.
   tophat_events_reset
+  # Where this run logs. A dry run writes to $TMPDIR, so a front end cannot
+  # assume $SETUP_LOG_DIR/latest.log and must be told.
+  event_emit log path="$SETUP_LOG"
 
   # One installer at a time: concurrent runs would fight over the same markers,
   # logs and package-manager lock. Dry runs change nothing, so they may overlap.

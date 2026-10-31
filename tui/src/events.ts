@@ -16,6 +16,7 @@ export type InstallerEvent = {
   desc?: string;
   reason?: string;
   exit?: string;
+  path?: string;
 };
 
 export type StageState = "pending" | "running" | "done" | "skipped" | "failed";
@@ -95,6 +96,15 @@ export function reduceEvents(events: InstallerEvent[]): StageBoard {
   }
 
   return { states, durations, currentCommand, currentStage, failed };
+}
+
+/** The log file the installer announced for this run, if it has. */
+export function logPathFrom(events: InstallerEvent[]): string | null {
+  let path: string | null = null;
+  for (const event of events) {
+    if (event.event === "log" && typeof event.path === "string" && event.path !== "") path = event.path;
+  }
+  return path;
 }
 
 /** Read and parse the stream, tolerating an absent file. */
