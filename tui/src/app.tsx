@@ -35,6 +35,7 @@ export type AppProps = {
   initialPlan?: StageName[];
   initialRemovals?: string[];
   initialEvents?: InstallerEvent[];
+  initialAborted?: boolean;
   loadPlan?: (config: Config) => Promise<StageName[]>;
 };
 
@@ -48,6 +49,7 @@ export function App({
   initialPlan = [],
   initialRemovals,
   initialEvents = [],
+  initialAborted = false,
   loadPlan,
 }: AppProps) {
   const renderer = useRenderer();
@@ -60,6 +62,7 @@ export function App({
   const [logLines, setLogLines] = useState<string[]>([]);
   const [done, setDone] = useState<Set<StageName>>(new Set(initialDone));
   const [exitCode, setExitCode] = useState<number | null>(initialExitCode);
+  const [aborted, setAborted] = useState(initialAborted);
   const [elapsed, setElapsed] = useState(0);
   const [plan, setPlan] = useState<StageName[]>(initialPlan);
   const [events, setEvents] = useState<InstallerEvent[]>(initialEvents);
@@ -130,11 +133,13 @@ export function App({
     };
   }, []);
 
-  const start = () => {
+  const start = (runConfig: Config = config) => {
     const spawnEngine = startEngine ?? ((cfg: Config) => startInstall(cfg, enginePaths));
-    const engine = spawnEngine(config);
+    const engine = spawnEngine(runConfig);
     engineRef.current = engine;
     startedAtRef.current = Date.now();
+    setAborted(false);
+    setExitCode(null);
     setScreen("run");
     engine?.child.on("exit", (code: number | null) => {
       setExitCode(code ?? 1);
@@ -172,12 +177,28 @@ export function App({
         renderer.destroy();
         break;
       case "abort":
+        setAborted(true);
         engineRef.current?.child.kill("SIGTERM");
         break;
+      case "retry": {
+        // Retry only the stage that failed: the installer resolves its own
+        // dependencies, so this cannot produce an incomplete plan.
+        const target = failedStage;
+        if (target && exitCode !== 0) {
+          const retryConfig = { ...config, selected: new Set<StageName>([target]) };
+          setConfig(retryConfig);
+          start(retryConfig);
+        }
+        break;
+      }
       case "none":
         break;
     }
   });
+
+  const board = reduceEvents(events);
+  // The first stage that reported a failure is the one worth retrying.
+  const failedStage = [...board.states].find(([, state]) => state === "failed")?.[0] ?? null;
 
   if (screen === "config") {
     const dependencyStages = dependencies(plan, config);
@@ -207,6 +228,7 @@ export function App({
                 <text key={row.stage} fg={index === cursor ? "#00b0ff" : undefined}>
                   {pointer} [{on ? "x" : " "}] {row.stage}
                   {dependencyStages.has(row.stage) ? "  (dependency)" : ""}
+                  {done.has(row.stage) ? "  (already done)" : ""}
                 </text>
               );
             }
@@ -283,14 +305,25 @@ export function App({
   }
 
   const ok = exitCode === 0;
+  const status = ok ? "Finished successfully" : aborted ? "Aborted" : `Failed (exit ${exitCode})`;
+  const colour = ok ? "#00c853" : aborted ? "#ffb300" : "#ff5252";
+
   return (
     <box style={{ flexDirection: "column", padding: 1, gap: 1 }}>
-      <text fg={ok ? "#00c853" : "#ff5252"}>{ok ? "Finished successfully" : `Failed (exit ${exitCode})`}</text>
+      <text fg={colour}>{status}</text>
+      {!ok && failedStage ? <text fg="#888888">Failed in stage: {failedStage}</text> : null}
       <text fg="#888888">
         {done.size} of {STAGES.length} stage markers present
       </text>
-      <text fg="#888888">{ok ? "Reboot to start the graphical session." : "See the log above; rerun to resume."}</text>
-      <text fg="#555555">q quit</text>
+      <text fg="#888888">
+        {ok
+          ? "Reboot to start the graphical session."
+          : aborted
+            ? "Stopped by you; completed stages are recorded, so a rerun resumes."
+            : "See the log below; a rerun resumes from the completed stages."}
+      </text>
+      <text fg="#555555">log: {latestLog(enginePaths)}</text>
+      <text fg="#555555">{!ok && failedStage ? "r retry failed stage   q quit" : "q quit"}</text>
     </box>
   );
 }

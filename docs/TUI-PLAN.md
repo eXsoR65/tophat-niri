@@ -1,6 +1,6 @@
 # Tophat TUI Plan
 
-Status: **M1–M3 implemented** (M4–M5 planned)
+Status: **M1–M5 implemented** (theming deferred)
 Frontend stack: [OpenTUI](https://opentui.com) + React bindings + Bun
 Tracking: this document (not `docs/TODO.md` — Phases 1–4 there are done)
 
@@ -156,8 +156,18 @@ was already guarded — but they will catch new ones.
   --help`, the fallback message when the TUI is skipped for want of Bun, and the
   TUI's own first screen ("runtime: bun x.y.z" plus a keep-it-patched line).
   `--diagnose` adds an `update_hint`.
-- [ ] **M5 — Polish.** Error recovery (retry failed stage / open log / abort),
-  resume-from-markers UI, theme, keybinding help footer.
+- [x] **M5 — Polish.** Done 2026-10-30, minus theming.
+  The done screen distinguishes three outcomes — success, `Aborted` (you pressed
+  `q`), and `Failed (exit N)` — and for a failure names the stage and offers
+  `r` to retry **only that stage**: the installer resolves its dependencies, so a
+  retry cannot produce an incomplete plan. The full log path is shown rather than
+  described. Without an event stream there is no stage name, so no retry is
+  offered rather than guessing.
+  The config screen marks stages a previous run completed ("(already done)"), so
+  a rerun reads as resume rather than as a repeat.
+  Keybinding hints are on every screen. **Deferred:** theming. It is cosmetic,
+  and a colour scheme is the kind of thing that should be chosen against a real
+  terminal rather than guessed at.
 
 ## Screens (target UX)
 

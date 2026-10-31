@@ -49,6 +49,12 @@ describe("keyAction on the run and done screens", () => {
     expect(keyAction("done", "q", 0, ROWS)).toEqual({ type: "quit" });
     expect(keyAction("done", "space", 0, ROWS)).toEqual({ type: "none" });
   });
+
+  test("r retries once finished, but not before", () => {
+    expect(keyAction("done", "r", 0, ROWS)).toEqual({ type: "retry" });
+    expect(keyAction("config", "r", 0, ROWS)).toEqual({ type: "none" });
+    expect(keyAction("run", "r", 0, ROWS)).toEqual({ type: "none" });
+  });
 });
 
 describe("moveCursor", () => {

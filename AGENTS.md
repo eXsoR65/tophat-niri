@@ -189,7 +189,8 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
   launcher with a Bash fallback, a separate `tui` CI job, the resolved-plan and
   dependency preview driven by `install.sh --print-plan`, and the stage board
   fed by the NDJSON event stream. M4's runtime provisioning is implemented
-  (`--install-runtime`, `--diagnose`); M5 is not started. **The Bash installer remains the only engine**: the TUI builds
+  (`--install-runtime`, `--diagnose`) and M5's failure handling (abort vs
+  failure, retry one stage, resume markers) is in. Only theming is deferred. **The Bash installer remains the only engine**: the TUI builds
   argv, spawns `install.sh`, and reads `$SETUP_LOG` plus the stage markers; it
   must never reimplement installer logic: the stage plan comes from
   `install.sh --print-plan`, never from a copy of `STAGE_DEPENDENCIES`, and

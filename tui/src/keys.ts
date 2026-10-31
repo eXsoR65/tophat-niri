@@ -13,7 +13,8 @@ export type Action =
   | { type: "toggle-row"; row: Row }
   | { type: "start" }
   | { type: "quit" }
-  | { type: "abort" };
+  | { type: "abort" }
+  | { type: "retry" };
 
 export function keyAction(screen: Screen, keyName: string, cursor: number, rows: Row[]): Action {
   if (screen === "run") {
@@ -21,7 +22,11 @@ export function keyAction(screen: Screen, keyName: string, cursor: number, rows:
   }
 
   if (screen === "done") {
-    return keyName === "q" ? { type: "quit" } : { type: "none" };
+    if (keyName === "q") return { type: "quit" };
+    // Retrying only exists once a run has finished, and only makes sense for a
+    // failure; the component decides whether there is a stage to retry.
+    if (keyName === "r") return { type: "retry" };
+    return { type: "none" };
   }
 
   switch (keyName) {

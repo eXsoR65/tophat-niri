@@ -170,6 +170,73 @@ describe("App", () => {
     }
   });
 
+  test("config screen marks stages a previous run already completed", async () => {
+    const frame = await frameOf(<App initialDone={["repos", "packaging"]} />);
+    expect(frame).toContain("[ ] repos  (already done)");
+    expect(frame).toContain("[ ] preflight");
+  });
+
+  test("failure screen names the failed stage and offers a retry", async () => {
+    const events = [
+      { event: "stage_start", at: 1, stage: "packaging" },
+      { event: "stage_fail", at: 2, stage: "packaging", reason: "dnf failed", exit: "1" },
+    ];
+    const frame = await frameOf(
+      <App initialScreen="done" initialExitCode={1} initialEvents={events} />,
+    );
+    expect(frame).toContain("Failed (exit 1)");
+    expect(frame).toContain("Failed in stage: packaging");
+    expect(frame).toContain("r retry failed stage");
+    expect(frame).toContain("/var/log/tophat/latest.log");
+  });
+
+  test("retrying runs only the failed stage", async () => {
+    const events = [
+      { event: "stage_start", at: 1, stage: "packaging" },
+      { event: "stage_fail", at: 2, stage: "packaging", reason: "dnf failed" },
+    ];
+    const started: string[][] = [];
+
+    const setup = await testRender(
+      <App
+        initialScreen="done"
+        initialExitCode={1}
+        initialEvents={events}
+        startEngine={(cfg) => {
+          started.push([...cfg.selected]);
+          return null;
+        }}
+      />,
+      { width: 90, height: 30 },
+    );
+    try {
+      await setup.waitForVisualIdle();
+      await act(async () => {
+        setup.mockInput.pressKey("r");
+      });
+      await setup.waitForVisualIdle();
+    } finally {
+      setup.renderer.destroy();
+    }
+
+    expect(started).toEqual([["packaging"]]);
+  });
+
+  test("an aborted run is not reported as a failure", async () => {
+    const frame = await frameOf(<App initialScreen="done" initialExitCode={143} initialAborted />);
+    expect(frame).toContain("Aborted");
+    expect(frame).toContain("Stopped by you");
+    expect(frame).not.toContain("Failed (exit");
+  });
+
+  test("a failure with no known stage offers no retry", async () => {
+    // Stdin was not ours to interpret: the exit code says failure, but without
+    // an event stream there is no stage name to retry.
+    const frame = await frameOf(<App initialScreen="done" initialExitCode={1} />);
+    expect(frame).toContain("Failed (exit 1)");
+    expect(frame).not.toContain("r retry failed stage");
+  });
+
   test("done screen reports a failure with its exit code", async () => {
     const frame = await frameOf(<App initialScreen="done" initialExitCode={1} />);
     expect(frame).toContain("Failed (exit 1)");
