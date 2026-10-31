@@ -138,6 +138,10 @@ decide() {
 # logic nor override its choices. `set -o pipefail` makes a failed download fail
 # the install rather than running bash on an empty pipe.
 install_runtime() {
+  if ! command -v curl >/dev/null 2>&1; then
+    printf 'curl is required to install Bun (dnf install curl).\n' >&2
+    return 1
+  fi
   printf 'Installing Bun: curl -fsSL https://bun.sh/install | bash\n' >&2
   curl -fsSL https://bun.sh/install | bash
   printf 'Bun installed; keep it patched with: bun upgrade\n' >&2

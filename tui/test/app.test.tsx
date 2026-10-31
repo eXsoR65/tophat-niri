@@ -3,6 +3,8 @@ import { testRender } from "@opentui/react/test-utils";
 import { act } from "react";
 import { App } from "../src/app.tsx";
 import { defaultConfig } from "../src/config.ts";
+import { ROWS } from "../src/rows.ts";
+import type { Engine } from "../src/engine.ts";
 
 // Renders a frame and waits for the UI to settle rather than guessing at a
 // single render pass (the pattern the OpenTUI testing reference recommends).
@@ -245,6 +247,41 @@ describe("App", () => {
     const frame = await frameOf(<App initialScreen="done" initialExitCode={1} />);
     expect(frame).toContain("Failed (exit 1)");
     expect(frame).not.toContain("r retry failed stage");
+  });
+
+  test("a spawn failure ends the run instead of hanging", async () => {
+    const handlers: Record<string, () => void> = {};
+    const fakeChild = {
+      pid: undefined,
+      exitCode: null,
+      signalCode: null,
+      on(event: string, cb: () => void) {
+        handlers[event] = cb;
+        return fakeChild;
+      },
+      kill() {},
+    };
+    const setup = await testRender(
+      <App
+        // The Start row is last; start from there and press space.
+        initialCursor={ROWS.length - 1}
+        startEngine={() => ({ child: fakeChild as unknown as Engine["child"], paths: {} as never, args: [] })}
+      />,
+      { width: 90, height: 30 },
+    );
+    try {
+      await setup.waitForVisualIdle();
+      await act(async () => {
+        setup.mockInput.pressKey(" ");
+      });
+      await act(async () => {
+        handlers.error?.();
+      });
+      await setup.waitForVisualIdle();
+      expect(setup.captureCharFrame()).toContain("Failed (exit 1)");
+    } finally {
+      setup.renderer.destroy();
+    }
   });
 
   test("done screen reports a failure with its exit code", async () => {

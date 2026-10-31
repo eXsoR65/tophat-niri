@@ -58,7 +58,9 @@ export async function fetchPlan(paths: Paths, config: Config): Promise<StageName
   const proc = Bun.spawn(["bash", paths.installScript, "--print-plan", ...args], {
     cwd: paths.root,
     stdout: "pipe",
-    stderr: "pipe",
+    // Never read: an unread pipe can fill and block the child. The plan summary
+    // on stderr is for humans running the command directly.
+    stderr: "ignore",
   });
   const [output, status] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
   if (status !== 0) return [];

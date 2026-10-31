@@ -189,6 +189,23 @@ was already guarded — but they will catch new ones.
   - Plus a non-root warning on the config screen: the installer refuses to run
     unprivileged, so saying it before Start beats a failed run.
 
+  A second pass, hunting for things that *escape* the checks rather than things
+  they catch, found four more:
+
+  - **`tophat` was not linted at all.** It is Bash without a `.sh` extension, so
+    `find -name '*.sh'`, the shellcheck file list and `shfmt` all missed it —
+    the file edited most in this branch. All three gates now name it
+    explicitly, in `verify_all` and in both CI jobs.
+  - **A second invocation truncated the first run's events** before failing on
+    the lock, because the stream was reset before acquiring it. The reset now
+    happens only for the lock owner.
+  - **A spawn failure left the run screen hanging**: `error` is emitted without
+    an `exit`, so nothing advanced the screen.
+  - **The plan preview spawned a subprocess per keystroke** (a held arrow key =
+    one `bash install.sh --print-plan` each). Now debounced by 120 ms.
+  - And the fake child in the new spawn test exposed a real duplication: the
+    cursor ref was seeded with `0` while state took `initialCursor`.
+
 ## Screens (target UX)
 
 1. **Welcome/detect** — Fedora version, target user, hardware notes (from

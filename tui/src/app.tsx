@@ -40,6 +40,7 @@ export type AppProps = {
   initialRemovals?: string[];
   initialEvents?: InstallerEvent[];
   initialAborted?: boolean;
+  initialCursor?: number;
   loadPlan?: (config: Config) => Promise<StageName[]>;
 };
 
@@ -54,6 +55,7 @@ export function App({
   initialRemovals,
   initialEvents = [],
   initialAborted = false,
+  initialCursor = 0,
   loadPlan,
 }: AppProps) {
   const renderer = useRenderer();
@@ -62,7 +64,7 @@ export function App({
   const enginePaths = useMemo(() => paths ?? resolvePaths(), [paths]);
   const [screen, setScreen] = useState<Screen>(initialScreen);
   const [config, setConfig] = useState<Config>(initialConfig ?? defaultConfig(detectedUser()));
-  const [cursor, setCursor] = useState(0);
+  const [cursor, setCursor] = useState(initialCursor);
   const [logLines, setLogLines] = useState<string[]>([]);
   const [done, setDone] = useState<Set<StageName>>(new Set(initialDone));
   const [exitCode, setExitCode] = useState<number | null>(initialExitCode);
@@ -79,7 +81,7 @@ export function App({
   // The keyboard handler closes over the state of the last render. Several keys
   // can arrive between renders (key repeat, a paste), so the current row has to
   // be read from a ref rather than from the captured `cursor`.
-  const cursorRef = useRef(0);
+  const cursorRef = useRef(initialCursor);
 
   // Poll the log and the markers while the installer runs. Both already exist:
   // run_logged writes the log and the stage markers are plain files.
@@ -129,12 +131,19 @@ export function App({
   useEffect(() => {
     if (screen !== "config") return;
     let cancelled = false;
-    const load = loadPlan ? loadPlan(config) : fetchPlan(enginePaths, config);
-    void load.then((result) => {
-      if (!cancelled) setPlan(result);
-    });
+
+    // Debounced: the plan comes from a subprocess, and a held arrow key would
+    // otherwise spawn one per keystroke.
+    const timer = setTimeout(() => {
+      const load = loadPlan ? loadPlan(config) : fetchPlan(enginePaths, config);
+      void load.then((result) => {
+        if (!cancelled) setPlan(result);
+      });
+    }, 120);
+
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [config.selected, screen, enginePaths, loadPlan]);
 
@@ -160,6 +169,12 @@ export function App({
     setScreen("run");
     engine?.child.on("exit", (code: number | null) => {
       setExitCode(code ?? 1);
+      setScreen("done");
+    });
+    // A failed spawn emits "error" without an "exit"; without this the run
+    // screen would wait forever.
+    engine?.child.on("error", () => {
+      setExitCode(1);
       setScreen("done");
     });
   };

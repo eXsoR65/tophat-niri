@@ -213,10 +213,11 @@ CI (`.github/workflows/ci.yml`, runs on push to main/dev and PRs) enforces, in
 order:
 
 ```bash
-find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n && bash -n install.sh
-shellcheck -s bash -x -e SC1090,SC1091 install.sh $(find lib tests kickstart -name '*.sh' | sort)
+find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+bash -n install.sh && bash -n tophat   # tophat is Bash without a .sh extension
+shellcheck -s bash -x -e SC1090,SC1091 install.sh tophat $(find lib tests kickstart -name '*.sh' | sort)
 tests/check_action_pins.sh                         # every action pinned to a SHA
-shfmt -d -i 2 -ci install.sh lib tests kickstart   # 2-space indent, case-indent
+shfmt -d -i 2 -ci install.sh tophat lib tests kickstart   # 2-space, case-indent
 kickstart/validate-kickstart.sh                    # rejects unsafe ks defaults
 for t in tests/*_test.sh; do "$t"; done             # 20 files: helpers, pkg, arg_parse,
                                                      # stage_resolution, finalize_guard, locking,

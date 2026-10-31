@@ -39,6 +39,7 @@ jobs:
         run: |
           find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
           bash -n install.sh
+          bash -n tophat # Bash without a .sh extension; the find above misses it
           # The one Python file: the same idea as bash -n.
           python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read())' \
             tests/check_action_pins.py
@@ -46,7 +47,7 @@ jobs:
       - name: ShellCheck
         run: |
           mapfile -t shell_files < <(find lib tests kickstart -type f -name '*.sh' -print | sort)
-          shellcheck -s bash -x -e SC1090,SC1091 install.sh "${shell_files[@]}"
+          shellcheck -s bash -x -e SC1090,SC1091 install.sh tophat "${shell_files[@]}"
 
       # A tag can be moved; a commit SHA cannot. Dependabot bumps the pin.
       - name: Workflow actions pinned
@@ -54,7 +55,7 @@ jobs:
 
       - name: Formatting
         run: |
-          shfmt -d -i 2 -ci install.sh lib tests kickstart
+          shfmt -d -i 2 -ci install.sh tophat lib tests kickstart
 
       - name: Kickstart validation
         run: |
@@ -165,6 +166,7 @@ jobs:
           echo '=== Bash syntax ==='
           find . -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
           bash -n install.sh
+          bash -n tophat
           python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read())' \
             tests/check_action_pins.py
 

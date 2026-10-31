@@ -166,17 +166,18 @@ main() {
   source "$SETUP_LIB/helpers/all.sh"
   log_ok "Helpers loaded"
 
-  # A rerun must not inherit the previous run's event stream.
-  tophat_events_reset
-  # Where this run logs. A dry run writes to $TMPDIR, so a front end cannot
-  # assume $SETUP_LOG_DIR/latest.log and must be told.
-  event_emit log path="$SETUP_LOG"
-
   # One installer at a time: concurrent runs would fight over the same markers,
   # logs and package-manager lock. Dry runs change nothing, so they may overlap.
   if [[ "$DRY_RUN" != true ]]; then
     acquire_run_lock || exit 1
   fi
+
+  # Only the run that owns the lock may (re)initialise the event stream: a second
+  # invocation used to truncate the first run's events and then fail on the lock.
+  tophat_events_reset
+  # Where this run logs. A dry run writes to $TMPDIR, so a front end cannot
+  # assume $SETUP_LOG_DIR/latest.log and must be told.
+  event_emit log path="$SETUP_LOG"
 
   # Run each selected stage
   for stage in "${STAGES[@]}"; do

@@ -26,15 +26,17 @@ fail() {
 step '1/7 bash syntax'
 find . -path ./.git -prune -o -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n || fail 'bash -n'
 bash -n install.sh || fail 'install.sh syntax'
+# The launcher is Bash without a .sh extension, so the find above misses it.
+bash -n tophat || fail 'tophat syntax'
 python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read())' \
   tests/check_action_pins.py || fail 'python syntax'
 
 step '2/7 shellcheck'
 mapfile -t shell_files < <(find lib tests kickstart -type f -name '*.sh' | sort)
-shellcheck -s bash -x -e SC1090,SC1091 install.sh "${shell_files[@]}" || fail 'shellcheck'
+shellcheck -s bash -x -e SC1090,SC1091 install.sh tophat "${shell_files[@]}" || fail 'shellcheck'
 
 step '3/7 formatting (shfmt -i 2 -ci)'
-shfmt -d -i 2 -ci install.sh lib tests kickstart || fail 'shfmt'
+shfmt -d -i 2 -ci install.sh tophat lib tests kickstart || fail 'shfmt'
 
 step '4/7 workflow actions pinned to SHAs'
 tests/check_action_pins.sh || fail 'action pinning'
