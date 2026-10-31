@@ -6,8 +6,9 @@
 #    error_exit() → log_error() + exit 1
 # =============================================================================
 
-declare -A STAGE_STATUS
-declare -A STAGE_DURATIONS
+declare -gA STAGE_STATUS
+declare -gA STAGE_DURATIONS
+TOPHAT_FAILURE_REASON=""
 CURRENT_STAGE=""
 SETUP_START_TIME=$(date +%s)
 
@@ -47,7 +48,7 @@ log_ok() { _log_write "OK" "$1"; }
 # v1-compatible error_exit
 error_exit() {
   log_error "$1"
-  event_emit stage_fail stage="${CURRENT_STAGE:-}" reason="$1"
+  TOPHAT_FAILURE_REASON="$1"
   exit 1
 }
 
@@ -90,7 +91,7 @@ run_logged() {
     log_error "$description FAILED (exit $exit_code, ${duration}s)"
     log_error "Command: $cmd_str"
     log_error "Check full log: $SETUP_LOG"
-    event_emit stage_fail stage="${CURRENT_STAGE:-}" reason="$description" exit="$exit_code"
+    TOPHAT_FAILURE_REASON="$description"
     exit "$exit_code"
   fi
 }
@@ -110,18 +111,39 @@ _json_escape() {
   s=${s//$'\n'/\\n}
   s=${s//$'\t'/\\t}
   s=${s//$'\r'/\\r}
+  # Bash strings cannot contain NUL; escape every other JSON control byte,
+  # including backspace, form feed and terminal escape sequences.
+  local code char escaped
+  for ((code = 1; code < 32; code++)); do
+    printf -v escaped '\\u%04x' "$code"
+    printf -v char '%b' "$escaped"
+    s=${s//"$char"/"$escaped"}
+  done
   printf '%s' "$s"
 }
 
 tophat_events_file() {
-  printf '%s/events.ndjson' "$SETUP_STATE_DIR"
+  printf '%s' "${TOPHAT_EVENTS_FILE:-$SETUP_STATE_DIR/events.ndjson}"
 }
 
-# Start a clean event stream for this run.
+# A dry run must never reset the live stream or create the live state directory.
+# Keep the generated path in the parent shell so every event uses the same file.
+_tophat_events_prepare() {
+  if [[ "${DRY_RUN:-false}" == true && -z "${TOPHAT_EVENTS_FILE:-}" ]]; then
+    TOPHAT_EVENTS_FILE="$(mktemp "${TMPDIR:-/tmp}/tophat-events.XXXXXXXX.ndjson")" || return 1
+    export TOPHAT_EVENTS_FILE
+  fi
+  local file
+  file="$(tophat_events_file)"
+  mkdir -p -- "$(dirname -- "$file")"
+}
+
+# Start a clean event stream for this run. Events are observational: neither
+# path creation nor a failed write may change installation success/failure.
 tophat_events_reset() {
   [[ "${TOPHAT_TUI:-0}" == 1 ]] || return 0
-  mkdir -p "$SETUP_STATE_DIR" 2>/dev/null || return 0
-  : >"$(tophat_events_file)" 2>/dev/null || true
+  _tophat_events_prepare 2>/dev/null || return 0
+  { : >"$(tophat_events_file)"; } 2>/dev/null || true
 }
 
 # event_emit <type> [key=value ...]
@@ -140,8 +162,8 @@ event_emit() {
   done
   line+="}"
 
-  mkdir -p "$SETUP_STATE_DIR" 2>/dev/null || return 0
-  printf '%s\n' "$line" >>"$(tophat_events_file)" 2>/dev/null || true
+  _tophat_events_prepare 2>/dev/null || return 0
+  { printf '%s\n' "$line" >>"$(tophat_events_file)"; } 2>/dev/null || true
 }
 
 # -----------------------------------------------------------------------------
@@ -266,8 +288,7 @@ stage_already_run() {
     return 1
   fi
 
-  STAGE_STATUS[$stage]="skipped"
-  STAGE_DURATIONS[$stage]=0
+  skip_stage "$stage" "Stage '$stage' already completed (matching marker)"
   return 0
 }
 
@@ -298,18 +319,33 @@ declare -ga _EXIT_HANDLERS=()
 
 register_exit_handler() {
   _EXIT_HANDLERS+=("$1")
-  trap '_run_exit_handlers' EXIT
+  trap '_run_exit_handlers "$?"' EXIT
 }
 
 _run_exit_handlers() {
-  local handler
+  local rc="$1" handler
 
-  # Defensive: if the registry were ever unset, exiting must not fail.
-  [[ -n "${_EXIT_HANDLERS[*]:-}" ]] || return 0
-  for handler in "${_EXIT_HANDLERS[@]}"; do
-    "$handler" || true
-  done
+  # Every handler sees the original status, never the previous cleanup's status.
+  # A failing cleanup must not prevent the other handlers or replace that status.
+  if [[ -n "${_EXIT_HANDLERS[*]:-}" ]]; then
+    for handler in "${_EXIT_HANDLERS[@]}"; do
+      "$handler" "$rc" || true
+    done
+  fi
+  return "$rc"
 }
+
+_tophat_final_failure() {
+  local rc="$1"
+  [[ "$rc" -ne 0 && -n "${CURRENT_STAGE:-}" ]] || return 0
+  STAGE_STATUS[$CURRENT_STAGE]="failed"
+  event_emit stage_fail stage="$CURRENT_STAGE" \
+    reason="${TOPHAT_FAILURE_REASON:-Installer exited with status $rc}" exit="$rc"
+}
+
+# Includes explicit exit, raw set -e failures, and failures propagated out of
+# main(). One terminal failure event, composed with lock and temporary cleanup.
+register_exit_handler _tophat_final_failure
 
 # -----------------------------------------------------------------------------
 # Single-run lock

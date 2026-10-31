@@ -4,7 +4,10 @@ import { act } from "react";
 import { App } from "../src/app.tsx";
 import { defaultConfig } from "../src/config.ts";
 import { ROWS } from "../src/rows.ts";
-import type { Engine } from "../src/engine.ts";
+import { startInstall, type Engine } from "../src/engine.ts";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 // Renders a frame and waits for the UI to settle rather than guessing at a
 // single render pass (the pattern the OpenTUI testing reference recommends).
@@ -288,4 +291,44 @@ describe("App", () => {
     const frame = await frameOf(<App initialScreen="done" initialExitCode={1} />);
     expect(frame).toContain("Failed (exit 1)");
   });
+});
+
+
+test("fast real failure is ingested before Done, including log and retry target", async () => {
+  const root = mkdtempSync(join(tmpdir(), "tophat-final-frame-"));
+  const paths = { root, installScript: join(root, "install.sh"), logDir: join(root, "logs"), stateDir: join(root, "state") };
+  const log = join(root, "dry-run.log");
+  writeFileSync(paths.installScript, `
+    mkdir -p "$PWD/state"
+    printf 'FINAL_LOG_LINE\\n' > "$PWD/dry-run.log"
+    touch "$PWD/state/stage-preflight.done"
+    printf '{"event":"log","at":1,"path":"%s"}\\n' "$PWD/dry-run.log" > "$TOPHAT_EVENTS_FILE"
+    printf '%s\\n' '{"event":"stage_fail","at":2,"stage":"packaging","exit":"17"}' >> "$TOPHAT_EVENTS_FILE"
+    exit 17
+  `);
+  let engine: Engine | null = null;
+  let starts = 0;
+  const setup = await testRender(<App
+    paths={paths}
+    initialCursor={ROWS.length - 1}
+    initialRemovals={[]}
+    startEngine={cfg => { starts++; engine = startInstall(cfg, paths); return engine; }}
+  />, { width: 100, height: 40 });
+  try {
+    await setup.waitForVisualIdle();
+    await act(async () => {
+      setup.mockInput.pressKey(" ");
+      setup.mockInput.pressKey(" ");
+    });
+    expect(starts).toBe(1);
+    await act(async () => { await engine!.completion; });
+    await setup.waitForVisualIdle();
+    const frame = setup.captureCharFrame();
+    expect(frame).toContain("Failed (exit 17)");
+    expect(frame).toContain("Failed in stage: packaging");
+    expect(frame).toContain("r retry failed stage");
+    expect(frame).toContain("FINAL_LOG_LINE");
+    expect(frame).toContain(log);
+    expect(frame).toContain("1 of 7");
+  } finally { setup.renderer.destroy(); }
 });

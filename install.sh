@@ -172,8 +172,9 @@ main() {
     acquire_run_lock || exit 1
   fi
 
-  # Only the run that owns the lock may (re)initialise the event stream: a second
-  # invocation used to truncate the first run's events and then fail on the lock.
+  # Live defaults remain lock-protected; TUI parents may supply a per-run
+  # TOPHAT_EVENTS_FILE. Dry runs without one use an isolated temporary stream,
+  # never the live state directory (and never truncate a concurrent live run).
   tophat_events_reset
   # Where this run logs. A dry run writes to $TMPDIR, so a front end cannot
   # assume $SETUP_LOG_DIR/latest.log and must be told.
@@ -181,13 +182,13 @@ main() {
 
   # Run each selected stage
   for stage in "${STAGES[@]}"; do
+    log_stage_start "$stage"
     local stage_file="$SETUP_LIB/$stage/all.sh"
     if [[ ! -f "$stage_file" ]]; then
       log_error "Stage file not found: $stage_file"
       exit 1
     fi
 
-    log_stage_start "$stage"
     # shellcheck disable=SC1090
     source "$stage_file"
 

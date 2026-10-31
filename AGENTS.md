@@ -153,6 +153,9 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
     installer leaves it — `$TOPHAT_BUN` (escape hatch), `PATH`, then
     `~/.bun/bin/bun` — installed only on request (`--install-runtime` or a
     prompt) by running that installer unmodified, and its version is displayed.
+    Explicit setup also installs TUI dependencies with the frozen lockfile;
+    failure exits nonzero rather than unexpectedly starting the CLI installer.
+    TTY status must be captured before command substitution redirects stdout.
 
 ## Known quirks / rough edges
 
@@ -195,7 +198,9 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
   must never reimplement installer logic: the stage plan comes from
   `install.sh --print-plan`, never from a copy of `STAGE_DEPENDENCIES`, and
   progress comes from the NDJSON stream (`events.ndjson`, written only when
-  `TOPHAT_TUI=1`) rather than by parsing the human log. The
+  `TOPHAT_TUI=1`) rather than by parsing the human log. Each managed run passes
+  its own `TOPHAT_EVENTS_FILE`, so concurrent runs/dry-runs cannot share a stream.
+  Completion drains child output and reads a final snapshot before leaving Run. The
   **OpenTUI skill** is installed at
   `~/.agents/skills/opentui` (from github.com/msmps/opentui-skill); load it
   before changing `tui/`. Its two rules that bit this codebase already: never

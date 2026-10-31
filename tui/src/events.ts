@@ -108,9 +108,9 @@ export function logPathFrom(events: InstallerEvent[]): string | null {
 }
 
 /** Read and parse the stream, tolerating an absent file. */
-export function readEvents(paths: Paths): InstallerEvent[] {
+export function readEvents(paths: Paths, eventsFile?: string): InstallerEvent[] {
   try {
-    return parseEvents(readFileSync(`${paths.stateDir}/events.ndjson`, "utf8"));
+    return parseEvents(readFileSync(eventsFile ?? `${paths.stateDir}/events.ndjson`, "utf8"));
   } catch {
     return [];
   }

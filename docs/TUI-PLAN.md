@@ -114,7 +114,8 @@ was already guarded — but they will catch new ones.
   ("Removes 9: mako, waybar, ...").
 - [x] **M3 — Structured events.** Done 2026-10-30.
   With `TOPHAT_TUI=1` the installer appends NDJSON to
-  `$SETUP_STATE_DIR/events.ndjson`: `stage_start`, `stage_done` (with seconds),
+  a private per-run file selected by `TOPHAT_EVENTS_FILE` (the live CLI helper
+  default remains `$SETUP_STATE_DIR/events.ndjson`): `stage_start`, `stage_done` (with seconds),
   `stage_skipped`, `stage_fail`, `command`, `marker`. The stream is truncated at
   the start of each run, so a rerun never inherits stale events, and nothing is
   written for a plain CLI run. Emitted with string substitution and an append —
@@ -242,3 +243,24 @@ stage (`--select`), view full log, abort.
   upstream agent skill (`npx skills add anomalyco/opentui`) when building.
 - **aarch64**: verify `bun build --compile` cross-builds; otherwise M4 ships
   x86_64 only and aarch64 falls back to Bash.
+
+## Independent pre-laptop review (2026-10-30)
+
+The earlier passing tests did not prove the launcher selected the TUI in a real
+terminal. `$(decide)` itself redirects stdout, so testing `-t 1` inside it always
+reported non-TTY. TTY status is now captured in the parent and regression-tested
+with actual PTYs. Fresh checkout setup is tested with fake Bun/curl, isolated
+HOME/PATH, consent, frozen dependency installation, and download/setup failures.
+
+The process integration tests now run real child scripts, not just injected view
+state: output larger than pipe buffers, immediate final failure plus a marker and
+announced log, duplicate input, distinct simultaneous event streams, and a
+TERM-resistant descendant. Both output pipes are drained, final observation is
+performed after close, and abort waits for bounded group shutdown. Marker skips
+and direct/raw stage failures have Bash event regressions too.
+
+Abort is not rollback. A forced kill can leave a package transaction needing
+recovery or a stale lock. The Bash leader can release its lock before a resistant
+child is killed during the grace window; do not run another installer during
+shutdown. The TUI blocks duplicate starts/retries until shutdown completes.
+Per-run temporary event files are retained for diagnosis.

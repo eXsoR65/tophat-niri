@@ -13,7 +13,7 @@
 #  Usage:
 #    ./tophat                      TUI when possible, else install.sh
 #    ./tophat --no-tui [opts...]   always install.sh
-#    ./tophat --install-runtime    install Bun (official installer), then start
+#    ./tophat --install-runtime    provision Bun and TUI dependencies, then start
 #    ./tophat --diagnose           report what was found and what would happen
 #    ./tophat [options...]         arguments are passed to install.sh
 # =============================================================================
@@ -34,6 +34,10 @@ export TOPHAT_ROOT="$ROOT"
 INSTALL="$ROOT/install.sh"
 TUI_ENTRY="$ROOT/tui/src/index.tsx"
 
+# Capture the caller's terminal before command substitutions replace stdout.
+terminal=false
+[[ -t 0 && -t 1 ]] && terminal=true
+
 usage() {
   cat <<'EOF'
 Usage: ./tophat [OPTIONS] [install.sh options...]
@@ -43,7 +47,7 @@ otherwise.
 
 Options:
   --no-tui            Always run install.sh
-  --install-runtime   Install Bun with its official installer, then start the TUI
+  --install-runtime   Allow Bun and frozen-lockfile dependency setup, then start
   --diagnose          Report what was found and what would happen
   --help, -h          Show this message
 
@@ -59,8 +63,13 @@ installer leaves it:
   3. ~/.bun/bin/bun (the official installer's default location, for the
      current shell before your profile picks it up)
 
-Without a terminal, without the TUI dependencies, or with any other argument,
-this runs install.sh unchanged. install.sh never needs Bun.
+In a terminal, --install-runtime authorizes network access to install missing
+Bun (official installer) and TUI dependencies (bun install --frozen-lockfile).
+If explicit setup fails, it exits without starting install.sh.
+
+Without a terminal, without the TUI dependencies (unless setup is requested),
+or with any other argument, this runs install.sh unchanged. install.sh never
+needs Bun.
 
 Keep the runtime patched: `bun upgrade` for the official install, `dnf upgrade`
 for a packaged one. The TUI shows the version it is running on its first screen.
@@ -118,8 +127,16 @@ decide() {
     printf 'fallback'
     return
   fi
-  if ! [[ -t 0 && -t 1 ]]; then
+  if [[ "$terminal" != true ]]; then
     printf 'fallback'
+    return
+  fi
+  if [[ ! -f "$TUI_ENTRY" ]]; then
+    printf 'fallback'
+    return
+  fi
+  if [[ "$install_runtime" == true ]]; then
+    printf 'provision'
     return
   fi
   if ! has_deps; then
@@ -143,8 +160,26 @@ install_runtime() {
     return 1
   fi
   printf 'Installing Bun: curl -fsSL https://bun.sh/install | bash\n' >&2
-  curl -fsSL https://bun.sh/install | bash
+  curl -fsSL https://bun.sh/install | bash || return 1
   printf 'Bun installed; keep it patched with: bun upgrade\n' >&2
+}
+
+# Called only after explicit opt-in or an affirmative terminal response. An
+# explicit request also authorizes dependency downloads into this checkout.
+provision_runtime() {
+  local bun_path
+  if ! bun_path="$(find_bun)"; then
+    install_runtime || return 1
+    bun_path="$(find_bun)" || {
+      printf 'Bun installation finished but no runtime was found.\n' >&2
+      return 1
+    }
+  fi
+  if ! has_deps; then
+    printf 'Installing TUI dependencies: bun install --frozen-lockfile\n' >&2
+    (cd "$ROOT/tui" && "$bun_path" install --frozen-lockfile) || return 1
+    has_deps || return 1
+  fi
 }
 
 explain_fallback() {
@@ -159,7 +194,7 @@ explain_fallback() {
     printf 'Install it with ./tophat --install-runtime, or use --no-tui to silence this.\n' >&2
     return 0
   fi
-  if ! [[ -t 0 && -t 1 ]]; then
+  if [[ "$terminal" != true ]]; then
     printf 'No terminal attached; using install.sh (run ./tophat in a terminal for the TUI).\n' >&2
   fi
 }
@@ -175,7 +210,7 @@ if [[ "$diagnose" == true ]]; then
   printf 'tui_entry=%s\n' "$TUI_ENTRY"
   printf 'deps=%s\n' "$(has_deps && echo yes || echo no)"
   printf 'bun=%s\n' "${bun_path:-none}"
-  printf 'tty=%s\n' "$([[ -t 0 && -t 1 ]] && echo yes || echo no)"
+  printf 'tty=%s\n' "$([[ "$terminal" == true ]] && echo yes || echo no)"
   printf 'decision=%s\n' "$(decide)"
   printf 'update_hint=%s\n' "$(find_bun >/dev/null 2>&1 && printf 'keep it patched: bun upgrade, or dnf upgrade if packaged' || printf 'run --install-runtime to install it the documented way')"
   exit 0
@@ -185,27 +220,27 @@ case "$(decide)" in
   tui)
     exec "$(find_bun)" "$TUI_ENTRY" "${args[@]}"
     ;;
-  needs-runtime)
-    if [[ "$install_runtime" == true ]]; then
-      install_runtime
-    else
+  provision | needs-runtime)
+    if [[ "$install_runtime" != true ]]; then
       printf 'The TUI needs Bun, which is not installed.\n' >&2
       printf "Install it now with Bun's official installer? [y/N] " >&2
       answer=""
       read -r answer || answer=""
       case "$answer" in
-        y | Y | yes | YES) install_runtime ;;
+        y | Y | yes | YES) ;;
         *)
           printf 'Falling back to the Bash installer. Use --no-tui to skip this prompt, or --install-runtime to automate it.\n' >&2
           fallback "${args[@]}"
           ;;
       esac
     fi
-    if ! bun_path="$(find_bun)"; then
-      printf 'Bun installation finished but no runtime was found; falling back.\n' >&2
+    if ! provision_runtime; then
+      printf 'TUI runtime setup failed.\n' >&2
+      # An explicit setup request must not unexpectedly start a system install.
+      [[ "$install_runtime" != true ]] || exit 1
       fallback "${args[@]}"
     fi
-    exec "$bun_path" "$TUI_ENTRY" "${args[@]}"
+    exec "$(find_bun)" "$TUI_ENTRY" "${args[@]}"
     ;;
   *)
     explain_fallback

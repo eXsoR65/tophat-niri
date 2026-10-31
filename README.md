@@ -120,23 +120,27 @@ up where its documentation says it does (`~/.bun`, on your `PATH` via your shell
 profile):
 
 ```bash
-./tophat --install-runtime        # non-interactive: install Bun, then start
+./tophat --install-runtime        # terminal required: approve Bun + dependency setup
 ./tophat --diagnose               # what was found, and what would happen
 ```
 
-`--install-runtime` runs the documented command and nothing else:
+`--install-runtime` installs missing Bun using the documented command:
 
 ```bash
 curl -fsSL https://bun.sh/install | bash
 ```
 
 so Bun lands in `~/.bun`, on your `PATH` as upstream describes, and is upgraded
-with `bun upgrade`.
+with `bun upgrade`. It then installs the checkout's TUI packages with
+`bun install --frozen-lockfile` in `tui/`. This setup downloads code only after
+explicit approval. If explicit setup fails, it exits with an error rather than
+starting a system installation unexpectedly. Non-terminal invocations do not
+download anything.
 
 `./tophat` looks for Bun only where that installer leaves it: `$TOPHAT_BUN` (an
 escape hatch), `bun` on `PATH`, then `~/.bun/bin/bun` for the current shell
 before your profile is reloaded. If you already have Bun from a package manager,
-nothing is installed.
+Bun itself is not reinstalled.
 
 The runtime is **not** shipped as a compiled binary on purpose: that would freeze
 a Bun inside each release, and a runtime security fix would then wait on a new
@@ -146,7 +150,7 @@ runtime is visible. Dependencies for the TUI's own packages still come from the
 checkout:
 
 ```bash
-cd tui && bun install
+(cd tui && bun install --frozen-lockfile)
 ```
 
 Without Bun, without those dependencies, with any argument, or when stdin or
@@ -154,6 +158,11 @@ stdout is not a terminal, `./tophat` runs `install.sh` unchanged — the launche
 can never be the reason an install fails. `install.sh` remains the only engine:
 the TUI passes flags and reads the log and `stage-*.done` markers, and does not
 reimplement any installer logic.
+
+**Abort is not rollback.** The TUI sends SIGTERM to the installer process group
+and escalates to SIGKILL if necessary before reporting completion. An interrupted
+package transaction may need recovery; forced termination may leave a stale lock.
+Do not start another installer while shutdown is in progress.
 
 ## Optional applications
 

@@ -4,19 +4,19 @@
 // against the real installer; stage graphs, event streams and distribution come
 // in later milestones (see docs/TUI-PLAN.md).
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useKeyboard, useRenderer } from "@opentui/react";
 import { STAGES, type StageName } from "./stages.ts";
 import { defaultConfig, detectedUser, toggleStage, type Config } from "./config.ts";
 import { markerStages } from "./markers.ts";
-import { tailLines } from "./logtail.ts";
+import { readSnapshot } from "./snapshot.ts";
 import { latestLog, resolvePaths } from "./paths.ts";
 import { startInstall, terminate, type Engine } from "./engine.ts";
 import { FLAG_LABELS, ROWS } from "./rows.ts";
 import { dependencies, fetchPlan, loadRemovals } from "./planner.ts";
-import { logPathFrom, readEvents, reduceEvents, stateGlyph, type InstallerEvent } from "./events.ts";
+import { reduceEvents, stateGlyph, type InstallerEvent } from "./events.ts";
 import { keyAction, moveCursor } from "./keys.ts";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
 
 export type Screen = "config" | "run" | "done";
 
@@ -69,6 +69,7 @@ export function App({
   const [done, setDone] = useState<Set<StageName>>(new Set(initialDone));
   const [exitCode, setExitCode] = useState<number | null>(initialExitCode);
   const [aborted, setAborted] = useState(initialAborted);
+  const [logPath, setLogPath] = useState(latestLog(enginePaths));
   // Mirrors `events` for the polling closure, which must not re-subscribe.
   const eventsRef = useRef<InstallerEvent[]>(initialEvents);
   const [elapsed, setElapsed] = useState(0);
@@ -77,47 +78,40 @@ export function App({
   const [removals, setRemovals] = useState<string[]>(initialRemovals ?? []);
 
   const engineRef = useRef<Engine | null>(null);
+  const activeRef = useRef(false);
   const startedAtRef = useRef(0);
   // The keyboard handler closes over the state of the last render. Several keys
   // can arrive between renders (key repeat, a paste), so the current row has to
   // be read from a ref rather than from the captured `cursor`.
   const cursorRef = useRef(initialCursor);
 
-  // Poll the log and the markers while the installer runs. Both already exist:
-  // run_logged writes the log and the stage markers are plain files.
+  // The same snapshot reader is used on completion: the last stage_fail or
+  // marker often arrives between polling intervals and must not be lost.
+  const refresh = useCallback(() => {
+    const snapshot = readSnapshot(enginePaths, engineRef.current, eventsRef.current);
+    eventsRef.current = snapshot.events;
+    setEvents(snapshot.events);
+    if (snapshot.done) setDone(snapshot.done);
+    setLogLines(snapshot.logLines);
+    setLogPath(snapshot.logPath);
+    setElapsed(startedAtRef.current === 0 ? 0 : Math.max(0, Math.round((Date.now() - startedAtRef.current) / 1000)));
+  }, [enginePaths]);
+
   useEffect(() => {
     if (screen !== "run") return;
-
-    const tick = () => {
-      try {
-        // The installer announces its log path; a dry run logs to $TMPDIR, so
-        // latest.log is only a fallback for a run we did not start.
-        const logPath = logPathFrom(eventsRef.current) ?? latestLog(enginePaths);
-        setLogLines(tailLines(readFileSync(logPath, "utf8"), 12));
-      } catch {
-        // No log yet; the first lines appear once the installer starts writing.
-      }
-      try {
-        setDone(markerStages(readdirSync(enginePaths.stateDir)));
-      } catch {
-        // State dir absent until the first stage completes.
-      }
-      // Structured events, when the installer is writing them, drive the board.
-      // An empty read must not wipe what is already there: the file is truncated
-      // at run start, so "" is a normal transient rather than "no events".
-      const fromFile = readEvents(enginePaths);
-      if (fromFile.length > 0) {
-        eventsRef.current = fromFile;
-        setEvents(fromFile);
-      }
-      setElapsed(
-        startedAtRef.current === 0 ? 0 : Math.max(0, Math.round((Date.now() - startedAtRef.current) / 1000)),
-      );
-    };
-
-    tick();
-    const timer = setInterval(tick, 400);
+    refresh();
+    const timer = setInterval(refresh, 400);
     return () => clearInterval(timer);
+  }, [screen, refresh]);
+
+  // Initial resume hints must not require running an installer first.
+  useEffect(() => {
+    if (screen !== "config") return;
+    try {
+      setDone(markerStages(readdirSync(enginePaths.stateDir)));
+    } catch {
+      // No persisted markers yet.
+    }
   }, [screen, enginePaths]);
 
   // The replacement list is static, so it is read once.
@@ -150,33 +144,46 @@ export function App({
   // Leaving the app must not leave an installer running unattended.
   useEffect(() => {
     return () => {
-      terminate(engineRef.current);
+      void terminate(engineRef.current);
     };
   }, []);
 
   const start = (runConfig: Config = config) => {
-    const spawnEngine = startEngine ?? ((cfg: Config) => startInstall(cfg, enginePaths));
-    const engine = spawnEngine(runConfig);
-    engineRef.current = engine;
+    // Prevent a repeated Enter/Space in one input batch from starting two runs.
+    if (activeRef.current) return;
+    activeRef.current = true;
     startedAtRef.current = Date.now();
     setAborted(false);
     setExitCode(null);
-    // A retry must not display the previous run's board: the installer truncates
-    // its stream, and the poll only replaces a non-empty read, so stale events
-    // would otherwise linger until the first new one arrives.
     eventsRef.current = [];
     setEvents([]);
+    setLogLines([]);
+    setLogPath("");
     setScreen("run");
-    engine?.child.on("exit", (code: number | null) => {
-      setExitCode(code ?? 1);
+
+    const finish = (code: number) => {
+      refresh(); // capture terminal events and the real log before stopping polls
+      activeRef.current = false;
+      setExitCode(code);
       setScreen("done");
-    });
-    // A failed spawn emits "error" without an "exit"; without this the run
-    // screen would wait forever.
-    engine?.child.on("error", () => {
+    };
+    try {
+      const spawnEngine = startEngine ?? ((cfg: Config) => startInstall(cfg, enginePaths));
+      const engine = spawnEngine(runConfig);
+      engineRef.current = engine;
+      if (engine?.completion) {
+        void engine.completion.then(finish, () => finish(1));
+      } else {
+        // Lightweight injected engines used by view tests.
+        engine?.child.on("exit", (code: number | null) => finish(code ?? 1));
+        engine?.child.on("error", () => finish(1));
+      }
+    } catch (error) {
+      activeRef.current = false;
+      setLogLines([String(error)]);
       setExitCode(1);
       setScreen("done");
-    });
+    }
   };
 
   useKeyboard((key) => {
@@ -210,7 +217,7 @@ export function App({
         break;
       case "abort":
         setAborted(true);
-        terminate(engineRef.current);
+        void terminate(engineRef.current);
         break;
       case "retry": {
         // Retry only the stage that failed: the installer resolves its own
@@ -355,9 +362,12 @@ export function App({
           ? "Reboot to start the graphical session."
           : aborted
             ? "Stopped by you; completed stages are recorded, so a rerun resumes."
-            : "See the log below; a rerun resumes from the completed stages."}
+            : "See the output below; a rerun resumes from the completed stages."}
       </text>
-      <text fg="#555555">log: {latestLog(enginePaths)}</text>
+      {logPath ? <text fg="#555555">log: {logPath}</text> : <text fg="#555555">Installer output (log not initialized)</text>}
+      <box style={{ flexDirection: "column", border: true, padding: 1 }}>
+        {logLines.map((line, index) => <text key={index}>{line}</text>)}
+      </box>
       <text fg="#555555">{!ok && failedStage ? "r retry failed stage   q quit" : "q quit"}</text>
     </box>
   );
