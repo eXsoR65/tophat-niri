@@ -99,7 +99,9 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
    a verbatim snapshot of the package lists in `stage-<stage>.config`
    (`_tophat_config_snapshot`). A marker is honoured only when the version, the
    target user and the package selection all still match; otherwise the stage
-   re-runs with a logged reason. The snapshot is compared as text because
+   re-runs with a logged reason. A stage that kept the DMS-replaced packages
+   also records `removals=skipped`, and that marker is invalidated once removal
+   consent is given. The snapshot is compared as text because
    `sha256sum`/`cksum` are not guaranteed on Fedora Minimal.
 2. **Dry run**: `run_logged` prints the command and returns 0. File writes must
    be manually gated with `[[ "$DRY_RUN" != true ]]`. Dry-run logs go to
@@ -155,7 +157,11 @@ from exported `TOPHAT_VERSION`, else `SETUP_ROOT/VERSION`, else `unknown`.
     prompt) by running that installer unmodified, and its version is displayed.
     Explicit setup also installs TUI dependencies with the frozen lockfile;
     failure exits nonzero rather than unexpectedly starting the CLI installer.
-    TTY status must be captured before command substitution redirects stdout.
+    That install is unconditional on request: an interrupted run can leave
+    `node_modules` behind, so a partial tree must not make setup skip the repair.
+    Normal launches require the dependency manifests and fall back to Bash when
+    they are missing. TTY status must be captured before command substitution
+    redirects stdout.
 
 ## Known quirks / rough edges
 

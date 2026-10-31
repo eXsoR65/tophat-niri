@@ -96,7 +96,13 @@ pkg_remove() {
       esac
     elif [[ "${TOPHAT_TUI:-0}" == 1 ]]; then
       # The TUI answers this on its config screen. Leaving the toggle off means
-      # "keep them", not "fail the stage", so the run continues.
+      # "keep them", not "fail the stage", so the run continues. Remember that
+      # the stage completed without removing anything: enabling removals on a
+      # later run must re-run that stage instead of skipping it as done.
+      if [[ -n "${CURRENT_STAGE:-}" ]]; then
+        # shellcheck disable=SC2034  # consumed by stage_marker_write in run_logged.sh
+        PACKAGE_REMOVALS_SKIPPED_STAGE="$CURRENT_STAGE"
+      fi
       log_warn "Skipping package removal (not enabled in the TUI); DMS-replaced packages stay installed"
       return 0
     else

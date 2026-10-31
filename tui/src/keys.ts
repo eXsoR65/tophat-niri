@@ -11,6 +11,7 @@ export type Action =
   | { type: "none" }
   | { type: "move"; delta: number }
   | { type: "toggle-row"; row: Row }
+  | { type: "edit-user" }
   | { type: "start" }
   | { type: "quit" }
   | { type: "abort" }
@@ -42,7 +43,11 @@ export function keyAction(screen: Screen, keyName: string, cursor: number, rows:
     case "enter": {
       const row = rows[cursor];
       if (!row) return { type: "none" };
-      return row.kind === "start" ? { type: "start" } : { type: "toggle-row", row };
+      if (row.kind === "start") return { type: "start" };
+      // The user field is edited in place; the component suppresses the global
+      // key actions while it is focused, so typing "q" does not quit.
+      if (row.kind === "user") return { type: "edit-user" };
+      return { type: "toggle-row", row };
     }
     case "q":
       return { type: "quit" };

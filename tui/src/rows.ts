@@ -8,6 +8,7 @@ export type FlagKey = "dryRun" | "verbose" | "acceptRemovals";
 
 export type Row =
   | { kind: "flag"; key: FlagKey }
+  | { kind: "user" }
   | { kind: "stage"; stage: StageName }
   | { kind: "start" };
 
@@ -15,6 +16,7 @@ export const ROWS: Row[] = [
   { kind: "flag", key: "dryRun" },
   { kind: "flag", key: "verbose" },
   { kind: "flag", key: "acceptRemovals" },
+  { kind: "user" },
   ...STAGES.map((stage) => ({ kind: "stage", stage }) as Row),
   { kind: "start" },
 ];

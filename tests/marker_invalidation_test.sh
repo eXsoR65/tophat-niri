@@ -84,6 +84,37 @@ printf '\nfirefox\n' >>"$SETUP_PACKAGES/remove-replaced.packages"
 skip_no packaging || fail "changed removal list did not invalidate the marker"
 grep -q 'Package selection changed' "$SETUP_LOG" || fail "removal-list change not explained"
 
+# --- Consent given later invalidates a stage that skipped removals ----------
+# The TUI's "keep packages" answer lets the stage complete, but a marker that
+# ignored the skipped removal would hide it forever once consent is given.
+PACKAGE_REMOVALS_SKIPPED_STAGE=packaging
+stage_marker_write packaging
+grep -q '^removals=skipped$' "$SETUP_STATE_DIR/stage-packaging.done" ||
+  fail "skipped removals not recorded in the marker"
+skip_yes packaging || fail "declined removals should not invalidate the marker by themselves"
+
+: >"$SETUP_LOG"
+ACCEPT_PACKAGE_REMOVALS=true
+skip_no packaging || fail "later removal consent did not invalidate the marker"
+grep -q "completed without the requested package removals" "$SETUP_LOG" ||
+  fail "removal-consent invalidation not explained"
+ACCEPT_PACKAGE_REMOVALS=false
+
+# Rewriting the marker without a skip clears the recorded state.
+stage_marker_write packaging
+if grep -q '^removals=' "$SETUP_STATE_DIR/stage-packaging.done"; then
+  fail "removal state leaked into an unrelated marker"
+fi
+skip_yes packaging || fail "marker without skipped removals was not honoured"
+
+# Only the stage that skipped the removal records it, not later stages.
+PACKAGE_REMOVALS_SKIPPED_STAGE=packaging
+stage_marker_write repos
+if grep -q '^removals=' "$SETUP_STATE_DIR/stage-repos.done"; then
+  fail "another stage recorded the skipped removal"
+fi
+stage_marker_write packaging
+
 # --- A marker without a recorded configuration is not trusted ---------------
 rm -f "$SETUP_STATE_DIR/stage-packaging.config"
 : >"$SETUP_LOG"

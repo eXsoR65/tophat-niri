@@ -52,12 +52,18 @@ printf 'install.sh args: <%s>\\n' "$@"
         if entry:
             (root / "tui/src/index.tsx").touch()
         if deps:
-            (root / "tui/node_modules/@opentui").mkdir(parents=True)
+            for package in ("@opentui/core", "@opentui/react", "react"):
+                directory = root / "tui/node_modules" / package
+                directory.mkdir(parents=True)
+                (directory / "package.json").write_text("{}")
         fake_bun = root / "fake-bun"
         script(fake_bun, '''printf 'bun:%s:%s\\n' "$PWD" "$*" >> "$TRACE"
 if [[ "${1:-}" == install ]]; then
   [[ "${DEPS_FAIL:-}" != yes ]] || exit 17
-  mkdir -p node_modules/@opentui
+  for package in @opentui/core @opentui/react react; do
+    mkdir -p "node_modules/$package"
+    : >"node_modules/$package/package.json"
+  done
 else
   printf 'TUI started\\n'
 fi
@@ -197,6 +203,24 @@ esac
     result = run(fix, ("--install-runtime",), tty=True)
     check(result[0] != 0 and "fallback" not in result[2] and "TUI started" not in result[1], str(result))
     check("curl:" not in result[2], "dependency failure must not reinstall Bun")
+
+    # An interrupted install can leave node_modules behind. Explicit setup must
+    # rerun the frozen install rather than trusting the partial tree.
+    fix = fixture("partial-deps-repair", deps=False, bun="override")
+    (fix[0] / "tui/node_modules/@opentui").mkdir(parents=True)
+    fix[1]["DEPS_FAIL"] = "yes"
+    result = run(fix, ("--install-runtime",), tty=True)
+    check(result[0] != 0, f"partial setup should fail once: {result}")
+    check(result[2].count("install --frozen-lockfile") == 1, str(result))
+    del fix[1]["DEPS_FAIL"]
+    result = run(fix, ("--install-runtime",), tty=True)
+    check(result[0] == 0 and "TUI started" in result[1], str(result))
+    check(result[2].count("install --frozen-lockfile") == 2, str(result))
+
+    # Without explicit setup, a partial tree is a fallback, never a crash.
+    fix = fixture("partial-deps-fallback", deps=False, bun="override")
+    (fix[0] / "tui/node_modules/@opentui").mkdir(parents=True)
+    fallback(run(fix, tty=True), "partial deps")
 
     fix = fixture("symlink", bun="override")
     copy = fix[0] / "tophat"

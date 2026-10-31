@@ -53,6 +53,112 @@ describe("App", () => {
     expect(frame).toContain("Dry run");
   });
 
+  test("target user is editable without quitting on a typed q", async () => {
+    const setup = await testRender(
+      <App initialConfig={defaultConfig("")} initialRemovals={[]} loadPlan={() => Promise.resolve([])} />,
+      { width: 90, height: 30 },
+    );
+    try {
+      await setup.waitForVisualIdle();
+      // dry run, verbose, removals, then the user row.
+      for (let press = 0; press < 3; press++) {
+        await act(async () => {
+          setup.mockInput.pressArrow("down");
+        });
+      }
+      await act(async () => {
+        setup.mockInput.pressEnter();
+      });
+      await act(async () => {
+        await setup.mockInput.typeText("alice");
+      });
+      await act(async () => {
+        // A letter that used to quit must now reach the focused input.
+        setup.mockInput.pressKey("q");
+      });
+      await setup.waitForVisualIdle();
+      expect(setup.captureCharFrame()).toContain("user: aliceq");
+
+      await act(async () => {
+        setup.mockInput.pressEscape();
+        // A lone ESC is held by the input parser until its sequence timeout.
+        await Bun.sleep(30);
+      });
+      await setup.waitForVisualIdle();
+      expect(setup.captureCharFrame()).toContain("enter to edit");
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+
+  test("config screen keeps Start visible on a 24-line terminal", async () => {
+    const setup = await testRender(
+      <App initialConfig={defaultConfig("alice")} initialRemovals={[]} loadPlan={() => Promise.resolve([])} />,
+      { width: 80, height: 24 },
+    );
+    try {
+      await setup.waitForVisualIdle();
+      const frame = setup.captureCharFrame();
+      expect(frame).toContain("User:");
+      expect(frame).toContain("Start install");
+      expect(frame).toContain("q quit");
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+
+  test("config row window follows the cursor on a short terminal", async () => {
+    const setup = await testRender(
+      <App
+        initialCursor={ROWS.length - 1}
+        initialConfig={defaultConfig("alice")}
+        initialRemovals={[]}
+        loadPlan={() => Promise.resolve([])}
+      />,
+      { width: 80, height: 20 },
+    );
+    try {
+      await setup.waitForVisualIdle();
+      const frame = setup.captureCharFrame();
+      expect(frame).toContain("Start install");
+      expect(frame).toContain("rows 5-12 of 12");
+      expect(frame).not.toContain("Dry run");
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+
+  test("run screen clips the log instead of overlapping rows on 80x24", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tophat-layout-run-"));
+    const logPath = join(root, "latest.log");
+    writeFileSync(logPath, Array.from({ length: 20 }, (_, index) => `log line ${index}`).join("\n"));
+    const paths = {
+      root,
+      installScript: join(root, "install.sh"),
+      logDir: root,
+      stateDir: join(root, "state"),
+    };
+    const events = [
+      { event: "stage_start", at: 1, stage: "preflight" },
+      { event: "command", at: 2, stage: "preflight", desc: "dnf upgrade" },
+    ];
+    const setup = await testRender(
+      <App initialScreen="run" initialEvents={events} paths={paths} />,
+      { width: 80, height: 24 },
+    );
+    try {
+      await setup.waitForVisualIdle();
+      const frame = setup.captureCharFrame();
+      expect(frame).toContain("[>] preflight");
+      expect(frame).toContain("now: dnf upgrade");
+      expect(frame).toContain("log line 19");
+      expect(frame).not.toContain("log line 0");
+      expect(frame).toContain("q abort");
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+
   test("run screen shows the stage board and waits for output", async () => {
     const frame = await frameOf(<App initialScreen="run" />);
     expect(frame).toContain("installing");

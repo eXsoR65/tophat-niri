@@ -108,6 +108,9 @@ preflight, repos, packaging, config, services, extras, finalize
 
 `./tophat` runs the same installer behind a small terminal UI: pick stages and
 options, start, watch the log and the stage markers, then reboot if it worked.
+The config screen also lets you edit the target user in place (`enter` edits,
+`enter`/`esc` finishes); this is how a direct root login can name the
+non-root account the installer should configure.
 
 ```bash
 ./tophat              # TUI when possible, install.sh otherwise

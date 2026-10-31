@@ -20,10 +20,10 @@ export function readSnapshot(paths: Paths, engine: Engine | null, previous: Inst
   const events = engine?.eventsFile ? fresh : fresh.length ? fresh : previous;
   const announced = logPathFrom(events);
   const logPath = announced ?? (engine?.eventsFile ? "" : latestLog(paths));
-  let logLines = tailLines(engine?.outputTail ?? "", 12);
+  let logLines = tailLines(engine?.outputTail ?? "", 50);
   if (logPath) {
     try {
-      logLines = tailLines(readFileSync(logPath, "utf8"), 12);
+      logLines = tailLines(readFileSync(logPath, "utf8"), 50);
     } catch {
       // Before log initialization, stderr/stdout still explain startup failures.
     }

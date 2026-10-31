@@ -3,6 +3,7 @@ import { keyAction, moveCursor } from "../src/keys.ts";
 import { ROWS } from "../src/rows.ts";
 
 const stageRowIndex = ROWS.findIndex((row) => row.kind === "stage");
+const userRowIndex = ROWS.findIndex((row) => row.kind === "user");
 const startRowIndex = ROWS.findIndex((row) => row.kind === "start");
 
 describe("keyAction on the config screen", () => {
@@ -26,6 +27,11 @@ describe("keyAction on the config screen", () => {
 
   test("space on the start row starts", () => {
     expect(keyAction("config", "space", startRowIndex, ROWS)).toEqual({ type: "start" });
+  });
+
+  test("the user row is edited, never toggled or started", () => {
+    expect(keyAction("config", "return", userRowIndex, ROWS)).toEqual({ type: "edit-user" });
+    expect(keyAction("config", "space", userRowIndex, ROWS)).toEqual({ type: "edit-user" });
   });
 
   test("enter activates the highlighted row, and only starts on the start row", () => {

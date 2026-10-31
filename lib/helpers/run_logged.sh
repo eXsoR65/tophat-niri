@@ -236,6 +236,13 @@ stage_marker_write() {
     printf 'completed=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
     printf 'version=%s\n' "${TOPHAT_VERSION:-unknown}"
     printf 'user=%s\n' "${TARGET_USER:-unknown}"
+    # A stage that kept DMS-replaced packages must say so: otherwise turning
+    # removal consent on later would find a "complete" marker and silently skip
+    # the removal entirely.
+    if [[ -n "${PACKAGE_REMOVALS_SKIPPED_STAGE:-}" && "$PACKAGE_REMOVALS_SKIPPED_STAGE" == "$stage" ]]; then
+      printf 'removals=skipped\n'
+      PACKAGE_REMOVALS_SKIPPED_STAGE=""
+    fi
   } >"$SETUP_STATE_DIR/stage-${stage}.done"
   _tophat_config_snapshot >"$SETUP_STATE_DIR/stage-${stage}.config"
   event_emit marker stage="$stage"
@@ -274,6 +281,16 @@ stage_already_run() {
     recorded="$(_marker_field "$marker" user || true)"
     if [[ -n "$recorded" && "$recorded" != "$TARGET_USER" ]]; then
       log_info "Stage '$stage' ran for user '$recorded'; re-running for '$TARGET_USER'"
+      return 1
+    fi
+  fi
+
+  # Consent to remove packages is part of what the stage did. A marker written
+  # while removals were skipped must not hide them once consent is given.
+  if [[ "${ACCEPT_PACKAGE_REMOVALS:-false}" == true ]]; then
+    recorded="$(_marker_field "$marker" removals || true)"
+    if [[ "$recorded" == "skipped" ]]; then
+      log_info "Stage '$stage' completed without the requested package removals; re-running it"
       return 1
     fi
   fi

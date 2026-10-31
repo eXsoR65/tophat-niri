@@ -99,6 +99,18 @@ manifest_count="$(find "$SETUP_STATE_DIR/manifests" -type f | wc -l)"
 grep -qxF mako "$SETUP_STATE_DIR"/manifests/removed-packages-*.txt ||
   fail "manifest missing removed package"
 
+# --- Declining removals in the TUI completes the stage, but records the skip -
+printf 'mako\n' >"$MOCK_INSTALLED"
+: >"$DNF_CALLS"
+CURRENT_STAGE=packaging
+TOPHAT_TUI=1 ACCEPT_PACKAGE_REMOVALS=false pkg_remove mako >/dev/null ||
+  fail "declining removals in the TUI should not fail the stage"
+[[ ! -s "$DNF_CALLS" ]] || fail "dnf remove called despite declined TUI removals"
+[[ "${PACKAGE_REMOVALS_SKIPPED_STAGE:-}" == "packaging" ]] ||
+  fail "skipped removals were not remembered for the marker"
+grep -q "Skipping package removal" "$SETUP_LOG" || fail "TUI skip not logged"
+unset PACKAGE_REMOVALS_SKIPPED_STAGE
+
 # --- Dry run never invokes dnf and writes no manifest -----------------------
 : >"$DNF_CALLS"
 manifests_before="$(find "$SETUP_STATE_DIR/manifests" -type f | wc -l)"

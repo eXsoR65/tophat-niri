@@ -5,7 +5,7 @@
 // in later milestones (see docs/TUI-PLAN.md).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useKeyboard, useRenderer } from "@opentui/react";
+import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { STAGES, type StageName } from "./stages.ts";
 import { defaultConfig, detectedUser, toggleStage, type Config } from "./config.ts";
 import { markerStages } from "./markers.ts";
@@ -16,6 +16,7 @@ import { FLAG_LABELS, ROWS } from "./rows.ts";
 import { dependencies, fetchPlan, loadRemovals } from "./planner.ts";
 import { reduceEvents, stateGlyph, type InstallerEvent } from "./events.ts";
 import { keyAction, moveCursor } from "./keys.ts";
+import { visibleWindow } from "./layout.ts";
 import { readdirSync } from "node:fs";
 
 export type Screen = "config" | "run" | "done";
@@ -59,12 +60,17 @@ export function App({
   loadPlan,
 }: AppProps) {
   const renderer = useRenderer();
+  const { height } = useTerminalDimensions();
+  // A 24-line terminal cannot show the full config list plus the log pane at
+  // the comfortable spacing; tighten chrome before windowing rows.
+  const compact = height < 30;
   // Memoised: a fresh object each render would re-run every effect that depends
   // on the paths, and the ones that set state would then loop.
   const enginePaths = useMemo(() => paths ?? resolvePaths(), [paths]);
   const [screen, setScreen] = useState<Screen>(initialScreen);
   const [config, setConfig] = useState<Config>(initialConfig ?? defaultConfig(detectedUser()));
   const [cursor, setCursor] = useState(initialCursor);
+  const [editingUser, setEditingUser] = useState(false);
   const [logLines, setLogLines] = useState<string[]>([]);
   const [done, setDone] = useState<Set<StageName>>(new Set(initialDone));
   const [exitCode, setExitCode] = useState<number | null>(initialExitCode);
@@ -84,6 +90,9 @@ export function App({
   // can arrive between renders (key repeat, a paste), so the current row has to
   // be read from a ref rather than from the captured `cursor`.
   const cursorRef = useRef(initialCursor);
+  // Read by the keyboard handler before the next render: entering edit mode and
+  // the first typed character can arrive in one input batch.
+  const editingRef = useRef(false);
 
   // The same snapshot reader is used on completion: the last stage_fail or
   // marker often arrives between polling intervals and must not be lost.
@@ -152,6 +161,8 @@ export function App({
     // Prevent a repeated Enter/Space in one input batch from starting two runs.
     if (activeRef.current) return;
     activeRef.current = true;
+    editingRef.current = false;
+    setEditingUser(false);
     startedAtRef.current = Date.now();
     setAborted(false);
     setExitCode(null);
@@ -187,6 +198,16 @@ export function App({
   };
 
   useKeyboard((key) => {
+    // While the user field is focused, its input renderable owns the keys:
+    // typing "q" must edit the name, not quit or start a privileged run.
+    if (editingRef.current) {
+      if (key.name === "escape" || key.name === "return" || key.name === "enter") {
+        editingRef.current = false;
+        setEditingUser(false);
+      }
+      return;
+    }
+
     const action = keyAction(screen, key.name, cursorRef.current, ROWS);
 
     switch (action.type) {
@@ -195,6 +216,10 @@ export function App({
         // of keys within one batch would otherwise all read the same row.
         cursorRef.current = moveCursor(cursorRef.current, action.delta, ROWS.length);
         setCursor(cursorRef.current);
+        break;
+      case "edit-user":
+        editingRef.current = true;
+        setEditingUser(true);
         break;
       case "toggle-row":
         if (action.row.kind === "flag") {
@@ -242,32 +267,69 @@ export function App({
   if (screen === "config") {
     const dependencyStages = dependencies(plan, config);
     const currentRow = ROWS[cursor];
+    const showRemovalsPreview =
+      currentRow?.kind === "flag" && currentRow.key === "acceptRemovals";
+    // Fixed lines outside the row list: title, description, summary, plan,
+    // hints, runtime note, plus the root warning and removals preview when
+    // present. Kept conservative so a 24-line terminal never clips the UI.
+    const chrome = (compact ? 10 : 14) + (IS_ROOT ? 0 : 2) + (showRemovalsPreview ? 2 : 0);
+    const rowsCapacity = Math.max(3, height - chrome);
+    const rowWindow = visibleWindow(cursor, ROWS.length, rowsCapacity);
 
     return (
-      <box style={{ flexDirection: "column", padding: 1, gap: 1 }}>
+      <box
+        style={{
+          flexDirection: "column",
+          padding: compact ? 0 : 1,
+          gap: compact ? 0 : 1,
+        }}
+      >
         <text fg="#00b0ff">Tophat</text>
         <text fg="#888888">Configure, then run the installer. Nothing is changed until you start.</text>
         {IS_ROOT ? null : (
           <text fg="#ffb300">Not root: the installer will refuse to start. Run it as: sudo ./tophat</text>
         )}
         <box style={{ flexDirection: "column" }}>
-          {ROWS.map((row, index) => {
-            const pointer = index === cursor ? ">" : " ";
+          {ROWS.slice(rowWindow.start, rowWindow.end).map((row, offset) => {
+            const index = rowWindow.start + offset;
+            const selected = index === cursor;
+            const pointer = selected ? ">" : " ";
             if (row.kind === "flag") {
               const on = config[row.key];
               const note =
                 row.key === "acceptRemovals" && !on ? "  (DMS-replaced packages stay installed)" : "";
               return (
-                <text key={row.key} fg={index === cursor ? "#00b0ff" : undefined}>
+                <text key={row.key} fg={selected ? "#00b0ff" : undefined}>
                   {pointer} [{on ? "x" : " "}] {FLAG_LABELS[row.key]}
                   {note}
                 </text>
               );
             }
+            if (row.kind === "user") {
+              return (
+                <box key="user" style={{ flexDirection: "row" }}>
+                  <text fg={selected ? "#00b0ff" : undefined}>{pointer} User: </text>
+                  <input
+                    value={config.targetUser}
+                    // `onInput` fires per keystroke; `onChange` only on blur or
+                    // submit, which would leave the summary stale while typing.
+                    onInput={(value) =>
+                      setConfig((current) => ({ ...current, targetUser: value }))
+                    }
+                    focused={editingUser && selected}
+                    width={24}
+                    placeholder="auto-detect"
+                  />
+                  <text fg="#555555">
+                    {editingUser && selected ? "  enter/esc done" : "  enter to edit"}
+                  </text>
+                </box>
+              );
+            }
             if (row.kind === "stage") {
               const on = config.selected.has(row.stage);
               return (
-                <text key={row.stage} fg={index === cursor ? "#00b0ff" : undefined}>
+                <text key={row.stage} fg={selected ? "#00b0ff" : undefined}>
                   {pointer} [{on ? "x" : " "}] {row.stage}
                   {dependencyStages.has(row.stage) ? "  (dependency)" : ""}
                   {done.has(row.stage) ? "  (already done)" : ""}
@@ -275,7 +337,7 @@ export function App({
               );
             }
             return (
-              <text key="start" fg={index === cursor ? "#00b0ff" : "#00c853"}>
+              <text key="start" fg={selected ? "#00b0ff" : "#00c853"}>
                 {pointer} Start install
               </text>
             );
@@ -284,11 +346,14 @@ export function App({
         <text fg="#888888">
           {config.selected.size === 0 ? "All stages selected" : `${config.selected.size} stage(s) selected`}
           {config.targetUser ? `  user: ${config.targetUser}` : ""}
+          {rowWindow.end - rowWindow.start < ROWS.length
+            ? `  rows ${rowWindow.start + 1}-${rowWindow.end} of ${ROWS.length}`
+            : ""}
         </text>
         <text fg="#888888">
           Plan: {plan.length > 0 ? plan.join(" -> ") : "(resolving from lib/stages.sh)"}
         </text>
-        {currentRow?.kind === "flag" && currentRow.key === "acceptRemovals" ? (
+        {showRemovalsPreview ? (
           <text fg="#888888">
             {removals.length > 0
               ? `Removes ${removals.length}: ${removals.slice(0, 6).join(", ")}${removals.length > 6 ? ", ..." : ""}`
@@ -304,13 +369,26 @@ export function App({
   }
 
   if (screen === "run") {
-    const board = reduceEvents(events);
     // Events are richer, but markers work on their own: fall back when a run
     // was started by something other than this TUI.
     const usingEvents = events.length > 0;
+    const runChrome = compact
+      ? board.currentCommand
+        ? 19
+        : 18
+      : board.currentCommand
+        ? 22
+        : 20;
+    const visibleLog = logLines.slice(-Math.max(2, height - runChrome));
 
     return (
-      <box style={{ flexDirection: "column", padding: 1, gap: 1 }}>
+      <box
+        style={{
+          flexDirection: "column",
+          padding: compact ? 0 : 1,
+          gap: compact ? 0 : 1,
+        }}
+      >
         <text fg={board.failed ? "red" : "#00b0ff"}>
           {board.failed ? "Tophat - failed" : "Tophat - installing"}
         </text>
@@ -337,7 +415,7 @@ export function App({
         </text>
         <box style={{ flexDirection: "column", border: true, padding: 1 }}>
           {logLines.length === 0 ? <text fg="#555555">waiting for output...</text> : null}
-          {logLines.map((line, index) => (
+          {visibleLog.map((line, index) => (
             <text key={index}>{line}</text>
           ))}
         </box>
@@ -349,9 +427,17 @@ export function App({
   const ok = exitCode === 0;
   const status = ok ? "Finished successfully" : aborted ? "Aborted" : `Failed (exit ${exitCode})`;
   const colour = ok ? "#00c853" : aborted ? "#ffb300" : "#ff5252";
+  const doneChrome = compact ? (failedStage ? 16 : 14) : failedStage ? 18 : 16;
+  const visibleLog = logLines.slice(-Math.max(2, height - doneChrome));
 
   return (
-    <box style={{ flexDirection: "column", padding: 1, gap: 1 }}>
+    <box
+      style={{
+        flexDirection: "column",
+        padding: compact ? 0 : 1,
+        gap: compact ? 0 : 1,
+      }}
+    >
       <text fg={colour}>{status}</text>
       {!ok && failedStage ? <text fg="#888888">Failed in stage: {failedStage}</text> : null}
       <text fg="#888888">
@@ -366,7 +452,7 @@ export function App({
       </text>
       {logPath ? <text fg="#555555">log: {logPath}</text> : <text fg="#555555">Installer output (log not initialized)</text>}
       <box style={{ flexDirection: "column", border: true, padding: 1 }}>
-        {logLines.map((line, index) => <text key={index}>{line}</text>)}
+        {visibleLog.map((line, index) => <text key={index}>{line}</text>)}
       </box>
       <text fg="#555555">{!ok && failedStage ? "r retry failed stage   q quit" : "q quit"}</text>
     </box>

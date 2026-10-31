@@ -100,7 +100,15 @@ done
 # profile has been reloaded), then that default directory for the current shell.
 BUN_BIN="${HOME:-/root}/.bun/bin/bun"
 
-has_deps() { [[ -d "$ROOT/tui/node_modules/@opentui" ]]; }
+has_deps() {
+  local package
+  # A failed or interrupted `bun install` can leave the namespace directory (or
+  # even some packages) behind. Require every runtime dependency's manifest, so
+  # a partial tree is treated as missing rather than launched and crashing.
+  for package in "@opentui/core" "@opentui/react" "react"; do
+    [[ -f "$ROOT/tui/node_modules/$package/package.json" ]] || return 1
+  done
+}
 
 find_bun() {
   local candidate
@@ -175,18 +183,21 @@ provision_runtime() {
       return 1
     }
   fi
-  if ! has_deps; then
-    printf 'Installing TUI dependencies: bun install --frozen-lockfile\n' >&2
-    (cd "$ROOT/tui" && "$bun_path" install --frozen-lockfile) || return 1
-    has_deps || return 1
-  fi
+  # Always run the frozen install when setup was requested. A previous attempt
+  # may have been interrupted after creating node_modules, and trusting the
+  # leftovers would leave --install-runtime unable to repair the very tree it
+  # was asked to build.
+  printf 'Installing TUI dependencies: bun install --frozen-lockfile\n' >&2
+  (cd "$ROOT/tui" && "$bun_path" install --frozen-lockfile) || return 1
+  has_deps || return 1
 }
 
 explain_fallback() {
   [[ "$use_tui" == true ]] || return 0
 
   if ! has_deps; then
-    printf 'TUI dependencies are missing (cd tui && bun install); using install.sh.\n' >&2
+    printf 'TUI dependencies are missing or incomplete; using install.sh.\n' >&2
+    printf 'Repair them with ./tophat --install-runtime (installs the frozen lockfile).\n' >&2
     return 0
   fi
   if ! find_bun >/dev/null 2>&1; then
